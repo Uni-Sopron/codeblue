@@ -116,16 +116,18 @@ export const DiceRoller: React.FC<DiceRollerProps> = ({
         </div>
       </div>
 
-      {/* Action Button */}
-      <button
-        type="button"
-        className="dice-roll-button"
-        onClick={handleRollClick}
-        disabled={disabled || isRolling}
-      >
-        <Dices size={20} className={isRolling ? 'dice-icon-spin' : ''} />
-        <span>{isRolling ? 'Dobás folyamatban...' : buttonLabel}</span>
-      </button>
+      {/* Action Button: only show when roll is available or while rolling */}
+      {!disabled || isRolling || diceResult === null ? (
+        <button
+          type="button"
+          className="dice-roll-button"
+          onClick={handleRollClick}
+          disabled={disabled || isRolling}
+        >
+          <Dices size={18} className={isRolling ? 'dice-icon-spin' : ''} />
+          <span>{isRolling ? 'Dobás folyamatban...' : buttonLabel}</span>
+        </button>
+      ) : null}
 
       {/* Result feedback */}
       {diceResult !== null && !isRolling && (

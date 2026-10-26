@@ -152,21 +152,21 @@
 /* Multi-pawn cluster inside tile */
 .tile-pawns-container {
   position: absolute;
-  bottom: 4px;
-  right: 4px;
+  top: 2px;
+  right: 2px;
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
+  gap: 2px;
   align-items: center;
   justify-content: flex-end;
-  max-width: 65px;
+  max-width: 55px;
   pointer-events: none;
   z-index: 10;
 }
 
 .pawns-count-1 {
-  bottom: 6px;
-  right: 6px;
+  top: 3px;
+  right: 3px;
 }
 
 .pawns-count-2 {

@@ -288,7 +288,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
               className="lobby-text-input"
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
-              placeholder={`Pl. Dr. ${selectedAvatar.title}`}
+              placeholder={`Pl. ${selectedAvatar.title} (Kovács Péter)`}
             />
           </div>
 
@@ -378,7 +378,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
               className="lobby-text-input"
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
-              placeholder={`Pl. Dr. ${selectedAvatar.title}`}
+              placeholder={`Pl. ${selectedAvatar.title} (Kovács Péter)`}
             />
           </div>
 

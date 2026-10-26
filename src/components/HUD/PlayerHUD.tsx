@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Player } from '../../types/game.ts';
 import { GAME_CONSTANTS } from '../../types/game.ts';
+import { getAvatarById } from '../../data/avatars.ts';
 import { Landmark, Activity } from 'lucide-react';
 import './PlayerHUD.css';
 
@@ -11,6 +12,7 @@ interface PlayerHUDProps {
   onOpenBank?: () => void;
   selectedPlayerIndex?: number;
   onSelectPlayer?: (index: number) => void;
+  myPlayerId?: string;
 }
 
 export const PlayerHUD: React.FC<PlayerHUDProps> = ({
@@ -20,6 +22,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
   onOpenBank,
   selectedPlayerIndex,
   onSelectPlayer,
+  myPlayerId,
 }) => {
   if (players.length === 0) {
     return null;
@@ -49,6 +52,8 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
         {players.map((player, index) => {
           const isActive = index === activePlayerIndex;
           const isSelected = selectedPlayerIndex === index;
+          const isMe = myPlayerId === player.id;
+          const avatarInfo = getAvatarById(player.avatar);
           const builtCount = player.builtElements.length;
           const totalBuildings = GAME_CONSTANTS.TOTAL_CLINIC_ELEMENTS;
 
@@ -64,14 +69,30 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
               <div className="player-header">
                 <div
                   className="player-avatar-circle"
-                  style={{ backgroundColor: player.color }}
+                  style={{
+                    borderColor: player.color,
+                    boxShadow: isActive ? `0 0 10px ${player.color}` : undefined,
+                  }}
                 >
-                  {player.name.charAt(0).toUpperCase()}
+                  {avatarInfo?.image ? (
+                    <img
+                      src={avatarInfo.image}
+                      alt={player.name}
+                      className="player-avatar-hud-img"
+                    />
+                  ) : (
+                    <span style={{ color: player.color }}>
+                      {player.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
                 </div>
 
                 <div className="player-identity">
-                  <h4 className="player-name">{player.name}</h4>
-                  <p className="player-role">{player.avatarTitle}</p>
+                  <div className="player-name-row">
+                    <h4 className="player-name">{player.name}</h4>
+                    {isMe && <span className="player-me-tag">Te</span>}
+                  </div>
+                  <p className="player-role">{avatarInfo?.title || player.avatarTitle}</p>
                 </div>
               </div>
 

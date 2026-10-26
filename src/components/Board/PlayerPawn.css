@@ -13,21 +13,21 @@
 }
 
 .pawn-sm {
+  width: 20px;
+  height: 20px;
+  border-width: 1.5px;
+}
+
+.pawn-md {
   width: 26px;
   height: 26px;
   border-width: 2px;
 }
 
-.pawn-md {
-  width: 34px;
-  height: 34px;
-  border-width: 2.5px;
-}
-
 .pawn-lg {
-  width: 48px;
-  height: 48px;
-  border-width: 3px;
+  width: 36px;
+  height: 36px;
+  border-width: 2.5px;
 }
 
 .pawn-image {

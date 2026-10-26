@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Building2,
   Landmark,
@@ -15,7 +15,7 @@ import { BOARD_TILES } from './data/tiles.ts';
 import { AVATARS } from './data/avatars.ts';
 import { useGameEngine } from './hooks/useGameEngine.ts';
 import { useGameAudio } from './hooks/useGameAudio.ts';
-import type { PlayerId, GamePhase, AvatarId, GameState } from './types/game.ts';
+import type { PlayerId, GamePhase, GameState } from './types/game.ts';
 import {
   multiplayerService,
   type RemotePlayer,
@@ -59,6 +59,7 @@ export function App() {
   const [gameMode, setGameMode] = useState<'local' | 'online' | null>(null);
   const [onlineRoom, setOnlineRoom] = useState<MultiplayerRoom | null>(null);
   const [myRemotePlayer, setMyRemotePlayer] = useState<RemotePlayer | null>(null);
+  const isRemoteUpdateRef = useRef(false);
 
   // Setup state (for local hotseat)
   const [playerCount, setPlayerCount] = useState<number>(4);
@@ -101,15 +102,16 @@ export function App() {
       setOnlineRoom(startedRoom);
       setMyRemotePlayer(me);
 
-      if (me.isHost) {
-        const configs = startedRoom.players.map((p, idx) => ({
+      const configs = startedRoom.players.map((p, idx) => {
+        const avatarInfo = AVATARS.find((a) => a.id === p.avatar) || AVATARS[idx % AVATARS.length];
+        return {
           id: `p${idx + 1}` as PlayerId,
           name: p.name,
-          avatar: p.avatar as AvatarId,
-          color: p.color,
-        }));
-        engine.startGame(configs);
-      }
+          avatar: avatarInfo.id,
+          color: avatarInfo.color,
+        };
+      });
+      engine.startGame(configs);
     },
     [engine]
   );
@@ -130,12 +132,25 @@ export function App() {
       const me = startedRoom.players.find((p) => p.socketId === socket.id);
       if (me) setMyRemotePlayer(me);
       if (initialGameState) {
+        isRemoteUpdateRef.current = true;
         engine.setFullGameState(initialGameState);
+      } else {
+        const configs = startedRoom.players.map((p, idx) => {
+          const avatarInfo = AVATARS.find((a) => a.id === p.avatar) || AVATARS[idx % AVATARS.length];
+          return {
+            id: `p${idx + 1}` as PlayerId,
+            name: p.name,
+            avatar: avatarInfo.id,
+            color: avatarInfo.color,
+          };
+        });
+        engine.startGame(configs);
       }
     };
 
     const handleRemoteSync = ({ gameState: remoteState }: { gameState: GameState }) => {
       if (remoteState) {
+        isRemoteUpdateRef.current = true;
         engine.setFullGameState(remoteState);
       }
     };
@@ -149,12 +164,16 @@ export function App() {
     };
   }, [engine]);
 
-  // Sync state to other players when active player mutates gameState
+  // Sync state to other players when a local player mutates gameState
   useEffect(() => {
-    if (gameMode === 'online' && onlineRoom && isMyTurn && gameState.phase !== 'setup') {
+    if (isRemoteUpdateRef.current) {
+      isRemoteUpdateRef.current = false;
+      return;
+    }
+    if (gameMode === 'online' && onlineRoom && gameState.phase !== 'setup') {
       multiplayerService.syncState(onlineRoom.code, gameState);
     }
-  }, [gameState, gameMode, onlineRoom, isMyTurn]);
+  }, [gameState, gameMode, onlineRoom]);
 
   // Handle dice roll
   const handleRollDice = useCallback(() => {
@@ -375,7 +394,7 @@ export function App() {
                           newNames[idx] = e.target.value;
                           setPlayerNames(newNames);
                         }}
-                        placeholder={`Pl. Dr. ${avatar.title}`}
+                        placeholder={`Pl. ${avatar.title} (Kovács Péter)`}
                       />
                       <span className="setup-player-desc">{avatar.description}</span>
                     </div>
@@ -405,6 +424,7 @@ export function App() {
             players={gameState.players}
             activePlayerIndex={gameState.activePlayerIndex}
             turnNumber={gameState.turnNumber}
+            myPlayerId={gameMode === 'online' ? myRemotePlayer?.id : undefined}
           />
 
           <main className="app-main">
@@ -418,7 +438,12 @@ export function App() {
                 isRolling={gameState.isRolling}
                 isMoving={gameState.phase === 'moving'}
                 onRollDice={handleRollDice}
-                isRollDisabled={!isMyTurn}
+                isRollDisabled={
+                  !isMyTurn ||
+                  gameState.phase !== 'roll' ||
+                  gameState.isRolling ||
+                  (engine.hasRolledThisTurn && !engine.extraRollAvailable)
+                }
                 onTileClick={(tile) => {
                   if (activePlayer && isMyTurn) {
                     engine.devTeleport(activePlayer.id, tile.id);

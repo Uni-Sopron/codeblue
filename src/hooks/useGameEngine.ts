@@ -1048,6 +1048,13 @@ export function useGameEngine() {
 
   const setFullGameState = useCallback((newState: GameState) => {
     setGameState(newState);
+    if (newState.phase === 'roll') {
+      setHasRolledThisTurn(false);
+      setHasBuiltThisTurn(false);
+      setExtraRollAvailable(false);
+    } else if (newState.phase === 'building' || newState.phase === 'tile_action') {
+      setHasRolledThisTurn(true);
+    }
   }, []);
 
   return {
