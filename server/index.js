@@ -44,6 +44,9 @@ app.get('/rooms', (req, res) => {
     gameStarted: r.gameStarted,
     createdAt: r.createdAt,
   }));
+  res.json({ rooms: publicRooms });
+});
+
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/socket.io') || req.path === '/health' || req.path === '/rooms') {
     return next();
