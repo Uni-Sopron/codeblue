@@ -17,6 +17,7 @@
 8. [Telepítés és Helyi Futtatás](#-telepítés-és-helyi-futtatás)
 9. [Docker és Éles Üzembe Helyezés](#-docker-és-éles-üzembe-helyezés)
 10. [Tesztelés és Kódminőség](#-tesztelés-és-kódminőség)
+11. [Készítők & Licenc](#-készítők--licenc)
 
 ---
 
@@ -221,5 +222,14 @@ npm run build
 
 ## 👥 Készítők & Licenc
 
-Készült a **Soproni Egyetem Hackathon 2026** alkalmából a CodeBlue csapat által.  
-Minden jog fenntartva.
+Készült a **Soproni Egyetem Hackathon 2026** alkalmából.
+
+### 🌟 CodeBlue Csapat:
+
+- 👨‍💻 **Wild Péter**
+- 👨‍💻 **Morvai Márkó**
+- 👩‍💻 **Moldicz Dzsenifer Fanni**
+
+---
+
+_Minden jog fenntartva © 2026 CodeBlue Csapat – Soproni Egyetem_
