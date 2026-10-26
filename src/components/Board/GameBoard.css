@@ -1,0 +1,248 @@
+.game-board-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+/* 10x10 CSS Grid for the 36 Perimeter Tiles */
+.game-board-grid {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  grid-template-rows: repeat(10, minmax(0, 1fr));
+  gap: 5px;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-height: 90vh;
+  background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+  border-radius: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), inset 0 0 40px rgba(0, 0, 0, 0.5);
+  padding: 10px;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.grid-tile-cell {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+/* Center Area (Spans Rows 2..9 and Cols 2..9) */
+.board-center-area {
+  grid-row: 2 / 10;
+  grid-column: 2 / 10;
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.6);
+}
+
+/* Background image & gradient overlay */
+.board-center-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.center-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.28;
+  filter: saturate(1.2) contrast(1.1);
+}
+
+.center-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(15, 23, 42, 0.85) 0%, rgba(2, 6, 23, 0.95) 100%);
+}
+
+/* Central interactive content */
+.center-content {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  width: 90%;
+  max-width: 520px;
+  height: 85%;
+  text-align: center;
+  padding: 10px 0;
+}
+
+/* Center Header */
+.center-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.center-badge {
+  font-size: 0.68rem;
+  letter-spacing: 2px;
+  font-weight: 800;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 3px 12px;
+  border-radius: 20px;
+}
+
+.center-title {
+  margin: 4px 0 0 0;
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -0.5px;
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+
+.title-highlight {
+  color: #00b4d8;
+  text-shadow: 0 0 20px rgba(0, 180, 216, 0.5);
+}
+
+.center-subtitle {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* Turn Card */
+.center-turn-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 2px solid;
+  border-radius: 12px;
+  padding: 8px 16px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  max-width: 380px;
+  width: 100%;
+}
+
+.turn-card-avatar-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.turn-card-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.turn-card-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  line-height: 1.2;
+}
+
+.turn-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 1px;
+}
+
+.turn-player-name {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.turn-player-role {
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+/* Center Dice Box */
+.center-dice-box {
+  margin: 6px 0;
+}
+
+/* Status Feed */
+.center-status-feed {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-msg {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  animation: fadeIn 0.3s ease;
+}
+
+.status-tile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.status-tile-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.status-tile-desc {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  max-width: 440px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .game-board-grid {
+    gap: 3px;
+    padding: 6px;
+  }
+  .center-title {
+    font-size: 1.6rem;
+  }
+  .center-turn-card {
+    padding: 6px 10px;
+    gap: 8px;
+  }
+  .turn-card-avatar {
+    width: 40px;
+    height: 40px;
+  }
+}

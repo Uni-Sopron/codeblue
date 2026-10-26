@@ -12,6 +12,7 @@ export const AVATARS: AvatarInfo[] = [
     color: '#0284c7', // Sky blue / Cyan
     accentColor: '#e0f2fe',
     icon: 'Scissors',
+    image: '/assets/avatar_surgeon.jpg',
     description: 'Hidegvérű precizitás a műtőben. Specialitása a sürgősségi és laparoszkópos beavatkozások.',
   },
   {
@@ -21,6 +22,7 @@ export const AVATARS: AvatarInfo[] = [
     color: '#0d9488', // Teal
     accentColor: '#ccfbf1',
     icon: 'Activity',
+    image: '/assets/avatar_diagnostician.jpg',
     description: 'Kiemelkedő analitikus készség. Nincs olyan rejtélyes kórkép, amit ne derítene fel a leletekből.',
   },
   {
@@ -30,6 +32,7 @@ export const AVATARS: AvatarInfo[] = [
     color: '#6366f1', // Indigo
     accentColor: '#e0e7ff',
     icon: 'Award',
+    image: '/assets/avatar_chief.jpg',
     description: 'Kiváló stratégiai és intézményvezetési érzék. A nemzetközi akkreditációk és fejlesztések mestere.',
   },
   {
@@ -39,6 +42,7 @@ export const AVATARS: AvatarInfo[] = [
     color: '#d97706', // Amber / Gold
     accentColor: '#fef3c7',
     icon: 'Sparkles',
+    image: '/assets/avatar_resident.jpg',
     description: 'Fiatalos lendület, modern telemedicina és mesterséges intelligencia alapú orvosi megoldások híve.',
   },
 ];
