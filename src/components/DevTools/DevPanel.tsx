@@ -1,8 +1,9 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import { EVENT_CARDS } from '../../data/cards.ts';
 import { BOARD_TILES } from '../../data/tiles.ts';
 import type { CardCategory, GameState, PlayerId } from '../../types/game.ts';
 import type { SoundEffect } from '../../utils/audio.ts';
+import { canUseDevTools } from '../../utils/devTools.ts';
 import './DevPanel.css';
 
 interface DevPanelProps {
@@ -23,11 +24,11 @@ const CARD_CATEGORIES: { id: CardCategory; label: string }[] = [
   { id: 'advantage', label: 'Előny' },
   { id: 'disadvantage', label: 'Hátrány' },
 ];
-const SOUND_PREVIEWS: { id: SoundEffect; label: string; hint: string }[] = [
-  { id: 'dice', label: 'Kockadobás', hint: 'Kocka csörgése' },
-  { id: 'money', label: 'Pénzmozgás', hint: 'Pénztár csilingelése' },
-  { id: 'card', label: 'Kártyahúzás', hint: 'Kártya suhanása' },
-  { id: 'victory', label: 'Győzelem', hint: 'Győzelmi fanfár' },
+const SOUND_PREVIEWS: { id: SoundEffect; label: string }[] = [
+  { id: 'dice', label: 'Kockadobás' },
+  { id: 'money', label: 'Pénzmozgás' },
+  { id: 'card', label: 'Kártyahúzás' },
+  { id: 'victory', label: 'Győzelem' },
 ];
 
 export function DevPanel({
@@ -44,76 +45,46 @@ export function DevPanel({
   const [selectedPlayerId, setSelectedPlayerId] = useState<PlayerId | ''>('');
   const [selectedTileId, setSelectedTileId] = useState(BOARD_TILES[0]?.id ?? 0);
   const [selectedCardId, setSelectedCardId] = useState(EVENT_CARDS[0]?.id ?? 1);
-  const [commandBusy, setCommandBusy] = useState(false);
-  const commandLock = useRef(false);
-  const unlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => () => {
-    if (unlockTimer.current !== null) clearTimeout(unlockTimer.current);
-  }, []);
-
   const activePlayer = gameState.players[gameState.activePlayerIndex];
   const selectedPlayer = gameState.players.find((player) => player.id === selectedPlayerId)
     ?? activePlayer;
-  const canUseGameActions = Boolean(activePlayer)
-    && (gameState.phase === 'roll' || gameState.phase === 'building')
-    && !gameState.isRolling
-    && !gameState.winner;
+  const canUseGameActions = canUseDevTools(gameState);
 
-  let availabilityMessage = 'A változtatások azonnal megjelennek a játékban és az eseménynaplóban.';
+  let availabilityMessage = '';
   if (gameState.winner || gameState.phase === 'game_over') {
-    availabilityMessage = 'A játék véget ért. A tesztműveletekhez indíts új játékot.';
+    availabilityMessage = 'A játék véget ért. Indíts új játékot a további teszteléshez.';
   } else if (gameState.phase === 'setup' || !activePlayer) {
-    availabilityMessage = 'A játék indítása után használhatod a tesztműveleteket. A hangokat már most kipróbálhatod.';
+    availabilityMessage = 'A tesztműveletekhez előbb indíts játékot.';
   } else if (gameState.isRolling || gameState.phase === 'moving') {
-    availabilityMessage = 'A dobás vagy a lépés folyamatban van. Várd meg a végét.';
+    availabilityMessage = 'Várd meg a dobás és a lépés végét.';
   } else if (!canUseGameActions) {
-    availabilityMessage = 'Előbb zárd le az aktuális játékeseményt vagy ablakot. A panel dobás előtt és építkezéskor használható.';
-  } else if (commandBusy) {
-    availabilityMessage = 'A tesztművelet alkalmazása folyamatban van…';
+    availabilityMessage = 'Előbb fejezd be az aktuális játékeseményt.';
   }
-
-  // Lock synchronously as well as visually so two quick clicks cannot open competing events.
-  const applyCommand = (command: () => void) => {
-    if (!canUseGameActions || commandLock.current) return;
-    commandLock.current = true;
-    setCommandBusy(true);
-    try {
-      command();
-    } finally {
-      unlockTimer.current = setTimeout(() => {
-        commandLock.current = false;
-        setCommandBusy(false);
-        unlockTimer.current = null;
-      }, 200);
-    }
-  };
 
   return (
     <details className="dev-panel">
       <summary className="dev-panel__summary">
         <span className="dev-panel__summary-copy">
-          <span className="dev-panel__eyebrow">DEMO · DEVTOOLS</span>
           <span className="dev-panel__title">Zsűri tesztpanel</span>
-          <span className="dev-panel__subtitle">Gyors játékhelyzetek és hangeffektek</span>
         </span>
-        <span className="dev-panel__toggle-hint" aria-hidden="true">Megnyitás / bezárás</span>
       </summary>
 
       <div className="dev-panel__body">
-        <p id={`${panelId}-availability`} className="dev-panel__notice" role="status">
-          {availabilityMessage}
-        </p>
+        {availabilityMessage && (
+          <p id={`${panelId}-availability`} className="dev-panel__notice" role="status">
+            {availabilityMessage}
+          </p>
+        )}
 
         <fieldset
           className="dev-panel__fieldset"
-          disabled={!canUseGameActions || commandBusy}
-          aria-describedby={`${panelId}-availability`}
+          disabled={!canUseGameActions}
+          aria-describedby={availabilityMessage ? `${panelId}-availability` : undefined}
         >
-          <legend>Játékhelyzetek tesztelése</legend>
+          <legend>Játékállapot</legend>
 
           <div className="dev-panel__player-picker">
-            <label htmlFor={`${panelId}-player`}>Játékos a pénz- és helyzetmódosításhoz</label>
+            <label htmlFor={`${panelId}-player`}>Játékos</label>
             <select
               id={`${panelId}-player`}
               value={selectedPlayer?.id ?? ''}
@@ -129,20 +100,19 @@ export function DevPanel({
             <p className="dev-panel__help">
               {selectedPlayer
                 ? `${selectedPlayer.cash.toLocaleString('hu-HU')} KK · ${selectedPlayer.position}. mező`
-                : 'Az indításkor létrehozott játékosok itt jelennek meg.'}
+                : 'Még nincs játékos.'}
             </p>
           </div>
 
           <div className="dev-panel__grid">
             <section className="dev-panel__card" aria-labelledby={`${panelId}-cash-title`}>
               <h3 id={`${panelId}-cash-title`}>Egyenleg módosítása</h3>
-              <p>Egymillió KlinikaKredit hozzáadása vagy levonása a kiválasztott játékostól.</p>
               <div className="dev-panel__button-row">
                 <button
                   className="dev-panel__button dev-panel__button--positive"
                   type="button"
                   disabled={!selectedPlayer}
-                  onClick={() => selectedPlayer && applyCommand(() => onAdjustCash(selectedPlayer.id, CASH_STEP))}
+                  onClick={() => selectedPlayer && onAdjustCash(selectedPlayer.id, CASH_STEP)}
                 >
                   +1 000 000 KK
                 </button>
@@ -150,13 +120,13 @@ export function DevPanel({
                   className="dev-panel__button"
                   type="button"
                   disabled={!selectedPlayer || selectedPlayer.cash < CASH_STEP}
-                  onClick={() => selectedPlayer && applyCommand(() => onAdjustCash(selectedPlayer.id, -CASH_STEP))}
+                  onClick={() => selectedPlayer && onAdjustCash(selectedPlayer.id, -CASH_STEP)}
                   aria-describedby={`${panelId}-cash-help`}
                 >
                   −1 000 000 KK
                 </button>
               </div>
-              <p id={`${panelId}-cash-help`} className="dev-panel__help">A levonáshoz legalább 1 000 000 KK egyenleg szükséges.</p>
+              <p id={`${panelId}-cash-help`} className="dev-panel__help">A levonáshoz legalább 1 000 000 KK szükséges.</p>
             </section>
 
             <section className="dev-panel__card" aria-labelledby={`${panelId}-teleport-title`}>
@@ -175,17 +145,17 @@ export function DevPanel({
                 className="dev-panel__button"
                 type="button"
                 disabled={!selectedPlayer}
-                onClick={() => selectedPlayer && applyCommand(() => onTeleport(selectedPlayer.id, selectedTileId))}
+                onClick={() => selectedPlayer && onTeleport(selectedPlayer.id, selectedTileId)}
                 aria-describedby={`${panelId}-teleport-help`}
               >
                 Bábu áthelyezése
               </button>
-              <p id={`${panelId}-teleport-help`} className="dev-panel__help">Csak a bábu helye változik. Az ugrás nem ad START-bónuszt, és nem indít mezőhatást.</p>
+              <p id={`${panelId}-teleport-help`} className="dev-panel__help">Áthelyezés mezőhatás és START-bónusz nélkül.</p>
             </section>
 
             <section className="dev-panel__card" aria-labelledby={`${panelId}-card-title`}>
-              <h3 id={`${panelId}-card-title`}>Konkrét eseménykártya</h3>
-              <p>A kártyát a soron lévő játékos kapja: <strong>{activePlayer?.name ?? '—'}</strong>.</p>
+              <h3 id={`${panelId}-card-title`}>Kártyahúzás</h3>
+              <p>Kártyát kap: <strong>{activePlayer?.name ?? '—'}</strong></p>
               <label htmlFor={`${panelId}-card`}>Eseménykártya</label>
               <select
                 id={`${panelId}-card`}
@@ -200,17 +170,17 @@ export function DevPanel({
                   </optgroup>
                 ))}
               </select>
-              <button className="dev-panel__button" type="button" onClick={() => applyCommand(() => onDrawCard(selectedCardId))}>
+              <button className="dev-panel__button" type="button" onClick={() => onDrawCard(selectedCardId)}>
                 Kártya megnyitása
               </button>
-              <p className="dev-panel__help">A hatást a megjelenő kártya elfogadásával alkalmazhatod.</p>
+              <p className="dev-panel__help">A hatás a kártya jóváhagyásakor érvényesül.</p>
             </section>
 
             <section className="dev-panel__card dev-panel__card--victory" aria-labelledby={`${panelId}-victory-title`}>
               <h3 id={`${panelId}-victory-title`}>Azonnali győzelem</h3>
-              <p>A soron lévő játékos győzelmét mutatja be: <strong>{activePlayer?.name ?? '—'}</strong>.</p>
-              <p className="dev-panel__help">Felépíti a 8 részleget, rendezi a tartozást, és biztosítja a szükséges tartaléktőkét.</p>
-              <button className="dev-panel__button dev-panel__button--victory" type="button" onClick={() => applyCommand(onInstantVictory)}>
+              <p>Győztes: <strong>{activePlayer?.name ?? '—'}</strong></p>
+              <p className="dev-panel__help">Beállítja a 8 részleget, a tartaléktőkét és a tartozásmentességet.</p>
+              <button className="dev-panel__button dev-panel__button--victory" type="button" onClick={onInstantVictory}>
                 Győzelem bemutatása
               </button>
             </section>
@@ -227,25 +197,19 @@ export function DevPanel({
               checked={soundEnabled}
               onChange={(event) => onSoundEnabledChange(event.target.checked)}
             />
-            <span>Hangeffektek bekapcsolva</span>
-            <span className="dev-panel__sound-state" aria-hidden="true">{soundEnabled ? 'BE' : 'KI'}</span>
+            <span>Hang bekapcsolva</span>
           </label>
-          <p id={`${panelId}-sound-help`} className="dev-panel__help">
-            {soundEnabled ? 'Válassz egy hangot az előnézethez.' : 'Kapcsold be a hangeffekteket az előnézethez.'}
-          </p>
           <div className="dev-panel__sound-grid">
             {SOUND_PREVIEWS.map((effect) => (
               <button
                 key={effect.id}
-                className="dev-panel__button dev-panel__sound-button"
+                className="dev-panel__button"
                 type="button"
                 disabled={!soundEnabled}
                 onClick={() => onPreviewSound(effect.id)}
                 aria-label={`${effect.label} hangjának lejátszása`}
-                aria-describedby={`${panelId}-sound-help`}
               >
-                <span>{effect.label}</span>
-                <span className="dev-panel__help">{effect.hint}</span>
+                {effect.label}
               </button>
             ))}
           </div>
@@ -253,7 +217,7 @@ export function DevPanel({
 
         <p className="dev-panel__log" aria-live="polite" aria-atomic="true">
           <span>Legutóbbi esemény</span>
-          {gameState.logs[0]?.message ?? 'A játék eseményei itt követhetők.'}
+          {gameState.logs[0]?.message ?? 'Még nincs esemény.'}
         </p>
       </div>
     </details>

@@ -15,7 +15,7 @@ export function canUseDevTools(state: GameState): boolean {
     !state.isRolling && !state.winner && !!state.players[state.activePlayerIndex];
 }
 
-/** Presentation-only transitions. Normal card effects still run in the engine. */
+// A tesztpanel állapotmódosításai. A kártyahatásokat továbbra is a játékmotor kezeli.
 export function applyDevAction(state: GameState, action: DevAction): GameState {
   if (!canUseDevTools(state)) return state;
 
@@ -50,7 +50,7 @@ export function applyDevAction(state: GameState, action: DevAction): GameState {
           ? { ...player, position: tile.id }
           : candidate),
       };
-      // Teleportation is a position edit, not a move through START or a tile event.
+      // A teleport nem indít mezőhatást és nem jár START-bónusszal.
       message = `${player.name}: teleport → #${tile.id} ${tile.name}.`;
       break;
     }
@@ -61,7 +61,7 @@ export function applyDevAction(state: GameState, action: DevAction): GameState {
         ...state,
         phase: 'card_modal',
         drawnCard: card,
-        // Allow deliberate re-tests without duplicating the card in either deck.
+        // Az újratesztelt lap is csak egyszer szerepeljen a paklikban.
         cardDeck: state.cardDeck.filter((id) => id !== card.id),
         discardDeck: [...state.discardDeck.filter((id) => id !== card.id), card.id],
       };

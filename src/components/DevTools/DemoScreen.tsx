@@ -24,7 +24,7 @@ const PHASE_LABELS: Record<GamePhase, string> = {
   game_over: 'Győzelem',
 };
 
-/** Isolated issue #6 demo. The full board integration belongs to issue #7. */
+// Külön bemutatóoldal a tesztpanel kipróbálásához.
 export function DemoScreen() {
   const engine = useGameEngine();
   const { gameState, activePlayer } = engine;
@@ -46,15 +46,12 @@ export function DemoScreen() {
       </header>
 
       <section className="demo-intro" aria-labelledby="demo-title">
-        <p className="demo-eyebrow">MAGÁNKLINIKA · HACKATHON 2026</p>
-        <h1 id="demo-title">Minden nagy klinika<br />egy jó döntéssel kezdődik.</h1>
-        <p>A tesztpanellel néhány kattintással bemutathatók a játék különböző helyzetei.</p>
+        <h1 id="demo-title">CodeBlue – bemutató</h1>
       </section>
 
       {gameState.phase === 'setup' ? (
         <section className="demo-start" aria-label="Bemutató indítása">
-          <div><Activity aria-hidden="true" /><h2>Indulhat a bemutató</h2></div>
-          <p>Valódi játékmotor, 40 eseménykártya és 8 felépíthető klinikarészleg.</p>
+          <div><Activity aria-hidden="true" /><h2>Új játék</h2></div>
           <label htmlFor="demo-player-count">Játékosok száma</label>
           <select id="demo-player-count" value={playerCount} onChange={(event) => setPlayerCount(Number(event.target.value))}>
             <option value={2}>2 orvos</option><option value={3}>3 orvos</option><option value={4}>4 orvos</option>
@@ -113,13 +110,12 @@ export function DemoScreen() {
 
       <section className="demo-log" aria-labelledby="demo-log-title">
         <h2 id="demo-log-title">Eseménynapló</h2>
-        <p className="demo-log-latest" role="status">{gameState.logs[0]?.message ?? 'Indíts egy bemutatót a tesztműveletekhez.'}</p>
+        <p className="demo-log-latest">{gameState.logs[0]?.message ?? 'Még nincs esemény.'}</p>
         <ol>{gameState.logs.slice(1, 6).map((log) => <li key={log.id}>{log.message}</li>)}</ol>
       </section>
 
       <CardModal card={gameState.drawnCard} isOpen={gameState.phase === 'card_modal'} onConfirm={engine.resolveCardAction} />
       <GameOverModal isOpen={gameState.phase === 'game_over'} winner={gameState.winner} turnNumber={gameState.turnNumber} onNewGame={engine.resetGame} />
-      <footer className="demo-footer">CodeBlue · A #6-os issue önálló bemutatója</footer>
     </main>
   );
 }

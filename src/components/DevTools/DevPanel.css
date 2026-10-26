@@ -35,28 +35,10 @@
   margin-left: 0.4rem;
 }
 
-.dev-panel__eyebrow {
-  color: #67e8f9;
-  font-size: 0.65rem;
-  font-weight: 800;
-  letter-spacing: 0.13em;
-}
-
 .dev-panel__title {
   color: #f8fafc;
   font-size: 1.1rem;
   font-weight: 750;
-}
-
-.dev-panel__subtitle,
-.dev-panel__toggle-hint {
-  color: #a2b7c9;
-  font-size: 0.78rem;
-}
-
-.dev-panel__toggle-hint {
-  float: right;
-  margin-top: 1.15rem;
 }
 
 .dev-panel[open] .dev-panel__summary {
@@ -262,26 +244,11 @@
   cursor: pointer;
 }
 
-.dev-panel__sound-state {
-  min-width: 2rem;
-  padding: 0.05rem 0.35rem;
-  border: 1px solid #42576e;
-  border-radius: 4px;
-  color: #67e8f9;
-  font-size: 0.65rem;
-  text-align: center;
-}
-
 .dev-panel__sound-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.65rem;
   margin-top: 0.75rem;
-}
-
-.dev-panel__sound-button {
-  flex-direction: column;
-  gap: 0.25rem;
 }
 
 .dev-panel__log {
@@ -317,9 +284,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .dev-panel__toggle-hint {
-    display: none;
-  }
 }
 
 @media (max-width: 380px) {
@@ -332,7 +296,4 @@
     padding: 0.8rem;
   }
 
-  .dev-panel__subtitle {
-    font-size: 0.7rem;
-  }
 }

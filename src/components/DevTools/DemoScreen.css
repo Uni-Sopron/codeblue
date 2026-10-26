@@ -15,10 +15,10 @@
 .demo-brand { font-size: 20px; font-weight: 850; letter-spacing: 1.5px; }
 .demo-brand svg, .demo-brand > span > span { color: #42d8d1; }
 .demo-badge { border: 1px solid #2b5264; border-radius: 999px; padding: 5px 12px; color: #8de5e5; font-size: 12px; }
-.demo-intro { padding: 52px 0 32px; }
+.demo-intro { padding: 24px 0; }
 .demo-eyebrow { color: #63c9cf; font-size: 11px; font-weight: 750; letter-spacing: 1.8px; text-transform: uppercase; }
-.demo-intro h1 { font-size: clamp(30px, 5vw, 47px); font-weight: 720; line-height: 1.15; letter-spacing: -1.5px; margin: 14px 0 20px; }
-.demo-intro > p:last-child, .demo-turn p, .demo-start > p { color: #9dafc3; }
+.demo-intro h1 { font-size: clamp(26px, 4vw, 36px); font-weight: 720; line-height: 1.2; letter-spacing: -1px; margin: 0; }
+.demo-turn p { color: #9dafc3; }
 .demo-start, .demo-turn, .demo-log { border: 1px solid #26394e; background: #111f30; border-radius: 16px; padding: 22px; margin-bottom: 20px; }
 .demo-screen h2 { font-size: 19px; margin: 0 0 8px; }
 .demo-start > div { margin-bottom: 12px; }
@@ -39,7 +39,6 @@
 .demo-log-latest { color: #c5e3ea; }
 .demo-log ol { color: #91a4b9; margin: 14px 0 0; padding-left: 20px; font-size: 13px; }
 .demo-log li + li { margin-top: 7px; }
-.demo-footer { text-align: center; color: #7290a7; font-size: 12px; padding-top: 10px; }
 .demo-screen .block { display: block; }
 .demo-screen .text-left { text-align: left; }
 .demo-screen .card-modal-backdrop, .demo-screen .game-over-backdrop { overflow: auto; }
