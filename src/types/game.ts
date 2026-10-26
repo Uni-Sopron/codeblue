@@ -18,6 +18,7 @@ export interface AvatarInfo {
   color: string;       // HEX színkód
   accentColor: string; // Halványabb háttérszín
   icon: string;        // Ikon azonosító
+  image?: string;      // Portré képfájl elérési útja
   description: string;
 }
 
