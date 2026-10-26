@@ -87,6 +87,28 @@
   animation: pulseDot 1.5s infinite;
 }
 
+.header-online-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(14, 165, 233, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.header-online-badge strong {
+  color: #f8fafc;
+  letter-spacing: 1px;
+}
+
+.header-my-doctor {
+  font-weight: 800;
+}
+
 @keyframes pulseDot {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(0.8); }
@@ -161,6 +183,30 @@
   border-radius: 20px;
   overflow: hidden;
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+}
+
+.setup-back-bar {
+  padding: 12px 20px 0 20px;
+}
+
+.btn-back-mode {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-back-mode:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
 }
 
 .setup-hero {
@@ -382,6 +428,24 @@
 }
 
 .roll-hint-badge strong {
+  color: #38bdf8;
+}
+
+.waiting-turn-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 20px;
+  padding: 8px 22px;
+  color: #94a3b8;
+  font-size: 0.88rem;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+}
+
+.waiting-turn-badge strong {
   color: #38bdf8;
 }
 

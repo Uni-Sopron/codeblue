@@ -8,14 +8,22 @@ import {
   VolumeX,
   Play,
   ArrowRight,
+  ArrowLeft,
+  Wifi,
 } from 'lucide-react';
 import { BOARD_TILES } from './data/tiles.ts';
 import { AVATARS } from './data/avatars.ts';
 import { useGameEngine } from './hooks/useGameEngine.ts';
 import { useGameAudio } from './hooks/useGameAudio.ts';
-import type { PlayerId, GamePhase } from './types/game.ts';
+import type { PlayerId, GamePhase, AvatarId, GameState } from './types/game.ts';
+import {
+  multiplayerService,
+  type RemotePlayer,
+  type MultiplayerRoom,
+} from './services/multiplayerSocket.ts';
 
 // UI Components
+import { MultiplayerLobby } from './components/Lobby/MultiplayerLobby.tsx';
 import { GameBoard } from './components/Board/GameBoard.tsx';
 import { PlayerHUD } from './components/HUD/PlayerHUD.tsx';
 import { ClinicDashboard } from './components/Clinic/ClinicDashboard.tsx';
@@ -47,7 +55,12 @@ export function App() {
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
 
-  // Setup state
+  // Multiplayer and game mode state
+  const [gameMode, setGameMode] = useState<'local' | 'online' | null>(null);
+  const [onlineRoom, setOnlineRoom] = useState<MultiplayerRoom | null>(null);
+  const [myRemotePlayer, setMyRemotePlayer] = useState<RemotePlayer | null>(null);
+
+  // Setup state (for local hotseat)
   const [playerCount, setPlayerCount] = useState<number>(4);
   const [playerNames, setPlayerNames] = useState<string[]>([
     '1. Orvos',
@@ -56,13 +69,20 @@ export function App() {
     '4. Orvos',
   ]);
 
+  // Determine if it is currently my turn
+  const isMyTurn = useMemo(() => {
+    if (gameMode !== 'online') return true;
+    if (!myRemotePlayer || !activePlayer) return false;
+    return activePlayer.id === myRemotePlayer.id;
+  }, [gameMode, myRemotePlayer, activePlayer]);
+
   // Current tile of active player
   const currentTile = useMemo(() => {
     if (!activePlayer) return undefined;
     return BOARD_TILES[activePlayer.position];
   }, [activePlayer]);
 
-  // Handle game start with selected doctor avatars
+  // Handle local game start
   const handleStartGame = () => {
     const selectedAvatars = AVATARS.slice(0, playerCount);
     const configs = selectedAvatars.map((avatar, idx) => ({
@@ -74,26 +94,91 @@ export function App() {
     engine.startGame(configs);
   };
 
+  // Handle online game start callback from lobby
+  const handleStartOnlineGame = useCallback(
+    (startedRoom: MultiplayerRoom, me: RemotePlayer) => {
+      setGameMode('online');
+      setOnlineRoom(startedRoom);
+      setMyRemotePlayer(me);
+
+      if (me.isHost) {
+        const configs = startedRoom.players.map((p, idx) => ({
+          id: `p${idx + 1}` as PlayerId,
+          name: p.name,
+          avatar: p.avatar as AvatarId,
+          color: p.color,
+        }));
+        engine.startGame(configs);
+      }
+    },
+    [engine]
+  );
+
+  // Socket listeners for game start and state synchronization
+  useEffect(() => {
+    const socket = multiplayerService.getSocket();
+
+    const handleGameStarted = ({
+      room: startedRoom,
+      gameState: initialGameState,
+    }: {
+      room: MultiplayerRoom;
+      gameState?: GameState;
+    }) => {
+      setGameMode('online');
+      setOnlineRoom(startedRoom);
+      const me = startedRoom.players.find((p) => p.socketId === socket.id);
+      if (me) setMyRemotePlayer(me);
+      if (initialGameState) {
+        engine.setFullGameState(initialGameState);
+      }
+    };
+
+    const handleRemoteSync = ({ gameState: remoteState }: { gameState: GameState }) => {
+      if (remoteState) {
+        engine.setFullGameState(remoteState);
+      }
+    };
+
+    socket.on('game:started', handleGameStarted);
+    socket.on('game:sync_broadcast', handleRemoteSync);
+
+    return () => {
+      socket.off('game:started', handleGameStarted);
+      socket.off('game:sync_broadcast', handleRemoteSync);
+    };
+  }, [engine]);
+
+  // Sync state to other players when active player mutates gameState
+  useEffect(() => {
+    if (gameMode === 'online' && onlineRoom && isMyTurn && gameState.phase !== 'setup') {
+      multiplayerService.syncState(onlineRoom.code, gameState);
+    }
+  }, [gameState, gameMode, onlineRoom, isMyTurn]);
+
   // Handle dice roll
   const handleRollDice = useCallback(() => {
-    if (gameState.phase !== 'roll' || gameState.isRolling) return;
+    if (gameState.phase !== 'roll' || gameState.isRolling || !isMyTurn) return;
     engine.rollDice();
-  }, [gameState.phase, gameState.isRolling, engine]);
+  }, [gameState.phase, gameState.isRolling, isMyTurn, engine]);
 
   // Keyboard shortcut: Space to roll dice
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && gameState.phase === 'roll' && !gameState.isRolling) {
+      if (e.code === 'Space' && gameState.phase === 'roll' && !gameState.isRolling && isMyTurn) {
         e.preventDefault();
         handleRollDice();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState.phase, gameState.isRolling, handleRollDice]);
+  }, [gameState.phase, gameState.isRolling, isMyTurn, handleRollDice]);
 
   // Status message for the center board feed
   const statusMessage = useMemo(() => {
+    if (gameMode === 'online' && !isMyTurn && activePlayer) {
+      return `⏳ Várakozás: ${activePlayer.name} orvos köre van folyamatban...`;
+    }
     if (gameState.phase === 'roll') {
       return `${activePlayer?.name ?? 'Játékos'}: Dobj a kockával a lépéshez! (Space vagy kattintás)`;
     }
@@ -110,7 +195,7 @@ export function App() {
       return 'Eseménykártya felhúzva! Olvasd el a lapot a folytatáshoz.';
     }
     return undefined;
-  }, [gameState.phase, activePlayer?.name, currentTile]);
+  }, [gameMode, isMyTurn, gameState.phase, activePlayer, currentTile]);
 
   return (
     <div className="app-container">
@@ -131,6 +216,18 @@ export function App() {
             <div className="header-phase-badge">
               <span className="phase-indicator-dot" />
               <span className="phase-text">{PHASE_LABELS[gameState.phase]}</span>
+            </div>
+          )}
+
+          {onlineRoom && (
+            <div className="header-online-badge">
+              <Wifi size={14} />
+              <span>Szoba: <strong>{onlineRoom.code}</strong></span>
+              {myRemotePlayer && (
+                <span className="header-my-doctor" style={{ color: myRemotePlayer.color }}>
+                  • {myRemotePlayer.name}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -180,7 +277,15 @@ export function App() {
             <button
               type="button"
               className="header-btn btn-reset"
-              onClick={engine.resetGame}
+              onClick={() => {
+                engine.resetGame();
+                if (gameMode === 'online') {
+                  multiplayerService.disconnect();
+                  setOnlineRoom(null);
+                  setMyRemotePlayer(null);
+                }
+                setGameMode(null);
+              }}
               title="Játék újraindítása"
             >
               <RotateCcw size={16} />
@@ -193,8 +298,24 @@ export function App() {
       {/* 2. SETUP SCREEN (When phase === 'setup') */}
       {/* ======================================================== */}
       {gameState.phase === 'setup' ? (
-        <main className="setup-container">
-          <div className="setup-card">
+        gameMode === null ? (
+          <MultiplayerLobby
+            onStartLocalGame={() => setGameMode('local')}
+            onStartOnlineGame={handleStartOnlineGame}
+          />
+        ) : (
+          <main className="setup-container">
+            <div className="setup-card">
+              <div className="setup-back-bar">
+                <button
+                  type="button"
+                  className="btn-back-mode"
+                  onClick={() => setGameMode(null)}
+                >
+                  <ArrowLeft size={16} />
+                  <span>Vissza a módválasztáshoz</span>
+                </button>
+              </div>
             <div className="setup-hero">
               <img
                 src="/assets/board_center.jpg"
@@ -273,6 +394,7 @@ export function App() {
             </div>
           </div>
         </main>
+        )
       ) : (
         /* ======================================================== */
         /* 3. ACTIVE GAME VIEW */
@@ -296,8 +418,9 @@ export function App() {
                 isRolling={gameState.isRolling}
                 isMoving={gameState.phase === 'moving'}
                 onRollDice={handleRollDice}
+                isRollDisabled={!isMyTurn}
                 onTileClick={(tile) => {
-                  if (activePlayer) {
+                  if (activePlayer && isMyTurn) {
                     engine.devTeleport(activePlayer.id, tile.id);
                   }
                 }}
@@ -306,43 +429,56 @@ export function App() {
 
               {/* Action Bar Beneath the Board */}
               <div className="board-turn-controls">
-                {gameState.phase === 'tile_action' && (
-                  <button
-                    type="button"
-                    className="action-btn-primary animate-pulse"
-                    onClick={engine.resolveTileAction}
-                  >
-                    <span>Mező eseményének végrehajtása</span>
-                    <ArrowRight size={18} />
-                  </button>
-                )}
-
-                {gameState.phase === 'building' && (
-                  <div className="building-phase-controls">
-                    <button
-                      type="button"
-                      className="action-btn-secondary"
-                      onClick={() => setIsClinicOpen(true)}
-                    >
-                      <Building2 size={18} />
-                      <span>Klinika Bővítése</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="action-btn-primary"
-                      onClick={engine.endTurn}
-                    >
-                      <span>Kör Befejezése</span>
-                      <ArrowRight size={18} />
-                    </button>
+                {!isMyTurn && gameMode === 'online' ? (
+                  <div className="waiting-turn-badge">
+                    <span className="pulse-dot" />
+                    <span>
+                      Várakozás: <strong>{activePlayer?.name}</strong> orvos köre van folyamatban...
+                    </span>
                   </div>
-                )}
+                ) : (
+                  <>
+                    {gameState.phase === 'tile_action' && (
+                      <button
+                        type="button"
+                        className="action-btn-primary animate-pulse"
+                        onClick={engine.resolveTileAction}
+                      >
+                        <span>Mező eseményének végrehajtása</span>
+                        <ArrowRight size={18} />
+                      </button>
+                    )}
 
-                {gameState.phase === 'roll' && (
-                  <div className="roll-hint-badge">
-                    <span>🎲 Nyomj <strong>Space</strong> billentyűt vagy kattints a fenti kockára a dobáshoz!</span>
-                  </div>
+                    {gameState.phase === 'building' && (
+                      <div className="building-phase-controls">
+                        <button
+                          type="button"
+                          className="action-btn-secondary"
+                          onClick={() => setIsClinicOpen(true)}
+                        >
+                          <Building2 size={18} />
+                          <span>Klinika Bővítése</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="action-btn-primary"
+                          onClick={engine.endTurn}
+                        >
+                          <span>Kör Befejezése</span>
+                          <ArrowRight size={18} />
+                        </button>
+                      </div>
+                    )}
+
+                    {gameState.phase === 'roll' && (
+                      <div className="roll-hint-badge">
+                        <span>
+                          🎲 Nyomj <strong>Space</strong> billentyűt vagy kattints a fenti kockára a dobáshoz!
+                        </span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>

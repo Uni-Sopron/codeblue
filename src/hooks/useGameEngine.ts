@@ -1046,6 +1046,10 @@ export function useGameEngine() {
     dispatchDevAction({ type: 'instant_victory' });
   }, [dispatchDevAction]);
 
+  const setFullGameState = useCallback((newState: GameState) => {
+    setGameState(newState);
+  }, []);
+
   return {
     gameState,
     activePlayer,
@@ -1062,6 +1066,7 @@ export function useGameEngine() {
     repayLoan,
     endTurn,
     resetGame,
+    setFullGameState,
     devAdjustCash,
     devTeleport,
     devDrawCard,

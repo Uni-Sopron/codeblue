@@ -15,6 +15,7 @@ interface GameBoardProps {
   onRollDice: (result: number) => void;
   onTileClick?: (tile: TileType) => void;
   statusMessage?: string;
+  isRollDisabled?: boolean;
 }
 
 const getTileGridStyle = (index: number): React.CSSProperties => {
@@ -59,6 +60,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   onRollDice,
   onTileClick,
   statusMessage,
+  isRollDisabled = false,
 }) => {
   const activePlayer = players[activePlayerIndex];
   const activeAvatar = activePlayer ? getAvatarById(activePlayer.avatar) : undefined;
@@ -154,8 +156,14 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 onRoll={onRollDice}
                 isRolling={isRolling}
                 diceResult={diceResult}
-                disabled={isMoving || isRolling}
-                buttonLabel={isMoving ? 'Lépkedés...' : 'Kockadobás'}
+                disabled={isMoving || isRolling || isRollDisabled}
+                buttonLabel={
+                  isMoving
+                    ? 'Lépkedés...'
+                    : isRollDisabled
+                    ? 'Várakozás...'
+                    : 'Kockadobás'
+                }
               />
             </div>
 
