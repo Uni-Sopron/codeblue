@@ -13,22 +13,80 @@ const PORT = process.env.PORT || 3001;
 const app = express();
 
 app.use(cors({ origin: '*' }));
-app.use(express.json());
+app.use(express.json({ limit: '256kb' }));
 app.use(express.static(publicPath));
 
 // In-memory room storage
 // Key: roomCode (e.g. "CB-4821"), Value: Room object
 const rooms = new Map();
 
-// Helper to generate a 4-digit readable room code
+// Constants & Helpers
+const ALLOWED_AVATARS = ['surgeon', 'diagnostician', 'chief_physician', 'resident'];
+const AVATAR_TITLES = {
+  surgeon: 'Dr. Sebész',
+  diagnostician: 'Dr. Diagnoszta',
+  chief_physician: 'Dr. Főorvos',
+  resident: 'Dr. Rezidens',
+};
+
+function sanitizeName(rawName, fallback = 'Orvos') {
+  if (typeof rawName !== 'string') return fallback;
+  const stripped = rawName.replace(/<[^>]*>?/gm, '').trim();
+  return stripped.length > 0 ? stripped.slice(0, 32) : fallback;
+}
+
+function isValidRoomCode(code) {
+  return typeof code === 'string' && /^CB-\d{4}$/.test(code.trim().toUpperCase());
+}
+
+function sanitizeAvatar(avatarId) {
+  return ALLOWED_AVATARS.includes(avatarId) ? avatarId : 'surgeon';
+}
+
+function sanitizeColor(color, fallback = '#00b4d8') {
+  if (typeof color === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color)) {
+    return color;
+  }
+  return fallback;
+}
+
+// Generate unique 4-digit room code
 function generateRoomCode() {
   const digits = Math.floor(1000 + Math.random() * 9000);
   const code = `CB-${digits}`;
   return rooms.has(code) ? generateRoomCode() : code;
 }
 
+// Rate Limiter per socket connection to prevent flooding
+const socketMessageCounts = new Map();
+function isRateLimited(socketId) {
+  const now = Date.now();
+  const entry = socketMessageCounts.get(socketId) || { count: 0, resetAt: now + 1000 };
+  if (now > entry.resetAt) {
+    entry.count = 1;
+    entry.resetAt = now + 1000;
+  } else {
+    entry.count += 1;
+  }
+  socketMessageCounts.set(socketId, entry);
+  return entry.count > 40; // Max 40 events per second
+}
+
+// Periodic Garbage Collector for inactive rooms (TTL: 3 hours)
+const ROOM_TTL_MS = 3 * 60 * 60 * 1000;
+setInterval(() => {
+  const now = Date.now();
+  for (const [code, room] of rooms.entries()) {
+    const lastActive = room.lastActive || new Date(room.createdAt).getTime();
+    if (now - lastActive > ROOM_TTL_MS) {
+      rooms.delete(code);
+      console.log(`[GC] Evicted inactive room ${code}`);
+    }
+  }
+}, 30 * 60 * 1000);
+
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     service: 'codeblue-multiplayer',
@@ -37,7 +95,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.get('/rooms', (req, res) => {
+app.get('/rooms', (_req, res) => {
   const publicRooms = Array.from(rooms.values()).map((r) => ({
     code: r.code,
     playerCount: r.players.length,
@@ -47,6 +105,7 @@ app.get('/rooms', (req, res) => {
   res.json({ rooms: publicRooms });
 });
 
+// Single Page Application Fallback
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/socket.io') || req.path === '/health' || req.path === '/rooms') {
     return next();
@@ -64,6 +123,7 @@ const io = new Server(httpServer, {
   },
   pingTimeout: 30000,
   pingInterval: 10000,
+  maxHttpBufferSize: 512 * 1024, // 512 KB payload max
 });
 
 io.on('connection', (socket) => {
@@ -75,14 +135,20 @@ io.on('connection', (socket) => {
   // 1. Create a new room (Host)
   socket.on('room:create', ({ playerName, avatarId, color }, callback) => {
     try {
+      if (isRateLimited(socket.id)) return;
+
       const roomCode = generateRoomCode();
+      const sanitizedName = sanitizeName(playerName, '1. Orvos');
+      const chosenAvatar = sanitizeAvatar(avatarId);
+      const chosenColor = sanitizeColor(color, '#00b4d8');
+
       const hostPlayer = {
         socketId: socket.id,
         id: 'p1',
-        name: playerName?.trim() || '1. Orvos',
-        avatar: avatarId || 'surgeon',
-        avatarTitle: 'Dr. Sebész',
-        color: color || '#00b4d8',
+        name: sanitizedName,
+        avatar: chosenAvatar,
+        avatarTitle: AVATAR_TITLES[chosenAvatar] || 'Dr. Sebész',
+        color: chosenColor,
         isHost: true,
         connected: true,
       };
@@ -94,6 +160,7 @@ io.on('connection', (socket) => {
         gameStarted: false,
         gameState: null,
         createdAt: new Date().toISOString(),
+        lastActive: Date.now(),
       };
 
       rooms.set(roomCode, room);
@@ -114,7 +181,16 @@ io.on('connection', (socket) => {
   // 2. Join existing room
   socket.on('room:join', ({ roomCode, playerName, avatarId, color }, callback) => {
     try {
-      const normalizedCode = roomCode?.trim().toUpperCase();
+      if (isRateLimited(socket.id)) return;
+
+      if (!isValidRoomCode(roomCode)) {
+        const error = 'Érvénytelen szobakód formátum! (Példa: CB-4821)';
+        if (typeof callback === 'function') callback({ success: false, error });
+        socket.emit('room:error', { error });
+        return;
+      }
+
+      const normalizedCode = roomCode.trim().toUpperCase();
       const room = rooms.get(normalizedCode);
 
       if (!room) {
@@ -139,31 +215,33 @@ io.on('connection', (socket) => {
       }
 
       // Check for avatar collision
-      const avatarTaken = room.players.some((p) => p.avatar === avatarId);
-      let chosenAvatar = avatarId;
+      let chosenAvatar = sanitizeAvatar(avatarId);
+      const avatarTaken = room.players.some((p) => p.avatar === chosenAvatar);
       if (avatarTaken) {
-        // Fallback to first available avatar
-        const allAvatars = ['surgeon', 'diagnostician', 'chief_physician', 'resident'];
         const takenAvatars = new Set(room.players.map((p) => p.avatar));
-        const available = allAvatars.find((a) => !takenAvatars.has(a));
+        const available = ALLOWED_AVATARS.find((a) => !takenAvatars.has(a));
         if (available) {
           chosenAvatar = available;
         }
       }
 
       const playerIndex = room.players.length + 1;
+      const sanitizedName = sanitizeName(playerName, `${playerIndex}. Orvos`);
+      const chosenColor = sanitizeColor(color, '#38bdf8');
+
       const newPlayer = {
         socketId: socket.id,
         id: `p${playerIndex}`,
-        name: playerName?.trim() || `${playerIndex}. Orvos`,
+        name: sanitizedName,
         avatar: chosenAvatar,
-        avatarTitle: `Dr. ${chosenAvatar}`,
-        color: color || '#38bdf8',
+        avatarTitle: AVATAR_TITLES[chosenAvatar] || `Dr. ${chosenAvatar}`,
+        color: chosenColor,
         isHost: false,
         connected: true,
       };
 
       room.players.push(newPlayer);
+      room.lastActive = Date.now();
       socket.join(normalizedCode);
       currentRoomCode = normalizedCode;
 
@@ -184,7 +262,10 @@ io.on('connection', (socket) => {
   // 3. Start game (Host only)
   socket.on('room:start', ({ roomCode, initialGameState }, callback) => {
     try {
-      const room = rooms.get(roomCode);
+      if (isRateLimited(socket.id)) return;
+
+      const normalizedCode = roomCode?.trim().toUpperCase();
+      const room = rooms.get(normalizedCode);
       if (!room) return;
 
       if (room.hostSocketId !== socket.id) {
@@ -201,11 +282,12 @@ io.on('connection', (socket) => {
 
       room.gameStarted = true;
       room.gameState = initialGameState;
+      room.lastActive = Date.now();
 
-      console.log(`[Game Started] Room ${roomCode} with ${room.players.length} players!`);
+      console.log(`[Game Started] Room ${normalizedCode} with ${room.players.length} players!`);
 
-      io.to(roomCode).emit('game:started', {
-        roomCode,
+      io.to(normalizedCode).emit('game:started', {
+        roomCode: normalizedCode,
         room,
         gameState: initialGameState,
       });
@@ -220,16 +302,18 @@ io.on('connection', (socket) => {
   // 4. Relay action across room
   socket.on('game:action', ({ roomCode, actionType, payload, newGameState }) => {
     try {
-      const room = rooms.get(roomCode);
+      if (isRateLimited(socket.id)) return;
+
+      const normalizedCode = roomCode?.trim().toUpperCase();
+      const room = rooms.get(normalizedCode);
       if (!room) return;
 
-      // Update server-side snapshot if provided
+      room.lastActive = Date.now();
       if (newGameState) {
         room.gameState = newGameState;
       }
 
-      // Broadcast action to all other peers in the room
-      socket.to(roomCode).emit('game:action_broadcast', {
+      socket.to(normalizedCode).emit('game:action_broadcast', {
         actionType,
         payload,
         newGameState,
@@ -243,18 +327,56 @@ io.on('connection', (socket) => {
   // 5. Full state sync broadcast
   socket.on('game:sync', ({ roomCode, gameState }) => {
     try {
-      const room = rooms.get(roomCode);
+      if (isRateLimited(socket.id)) return;
+
+      const normalizedCode = roomCode?.trim().toUpperCase();
+      const room = rooms.get(normalizedCode);
       if (!room) return;
+
+      room.lastActive = Date.now();
       room.gameState = gameState;
-      socket.to(roomCode).emit('game:sync_broadcast', { gameState });
+      socket.to(normalizedCode).emit('game:sync_broadcast', { gameState });
     } catch (err) {
       console.error('[game:sync error]', err);
     }
   });
 
-  // 6. Handle disconnect
+  // 6. Player Reconnection
+  socket.on('room:reconnect', ({ roomCode, playerId }, callback) => {
+    try {
+      const normalizedCode = roomCode?.trim().toUpperCase();
+      const room = rooms.get(normalizedCode);
+      if (!room) {
+        if (typeof callback === 'function') callback({ success: false, error: 'A szoba már nem létezik.' });
+        return;
+      }
+
+      const player = room.players.find((p) => p.id === playerId);
+      if (!player) {
+        if (typeof callback === 'function') callback({ success: false, error: 'Játékos nem található a szobában.' });
+        return;
+      }
+
+      player.socketId = socket.id;
+      player.connected = true;
+      socket.join(normalizedCode);
+      currentRoomCode = normalizedCode;
+      room.lastActive = Date.now();
+
+      console.log(`[Player Reconnected] ${player.name} (${player.id}) in room ${normalizedCode}`);
+      const response = { success: true, room, player, gameState: room.gameState };
+      if (typeof callback === 'function') callback(response);
+      io.to(normalizedCode).emit('room:update', { room });
+    } catch (err) {
+      console.error('[room:reconnect error]', err);
+      if (typeof callback === 'function') callback({ success: false, error: err.message });
+    }
+  });
+
+  // 7. Handle disconnect
   socket.on('disconnect', () => {
     console.log(`[Socket] Client disconnected: ${socket.id}`);
+    socketMessageCounts.delete(socket.id);
 
     if (currentRoomCode) {
       const room = rooms.get(currentRoomCode);
@@ -264,16 +386,16 @@ io.on('connection', (socket) => {
           const leavingPlayer = room.players[playerIndex];
 
           if (!room.gameStarted) {
-            // If lobby, remove player entirely
+            // In lobby: remove player entirely
             room.players.splice(playerIndex, 1);
 
-            // If host left and others remain, assign new host
+            // Reassign host if host left
             if (leavingPlayer.isHost && room.players.length > 0) {
               room.players[0].isHost = true;
               room.hostSocketId = room.players[0].socketId;
             }
 
-            // If empty, clean up room
+            // Cleanup if empty
             if (room.players.length === 0) {
               rooms.delete(currentRoomCode);
               console.log(`[Room Deleted] ${currentRoomCode} is empty.`);
@@ -281,8 +403,9 @@ io.on('connection', (socket) => {
               io.to(currentRoomCode).emit('room:update', { room });
             }
           } else {
-            // If game is active, mark disconnected so they can reconnect
+            // In active game: preserve state and allow reconnection
             leavingPlayer.connected = false;
+            room.lastActive = Date.now();
             io.to(currentRoomCode).emit('player:disconnected', {
               playerId: leavingPlayer.id,
               playerName: leavingPlayer.name,
@@ -292,6 +415,14 @@ io.on('connection', (socket) => {
       }
     }
   });
+});
+
+// Process-level Crash Guards
+process.on('uncaughtException', (err) => {
+  console.error('[Uncaught Exception]', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[Unhandled Rejection]', reason);
 });
 
 httpServer.listen(PORT, () => {

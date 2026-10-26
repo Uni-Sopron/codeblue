@@ -145,6 +145,26 @@ class MultiplayerSocketService {
     this.socket.emit('game:sync', { roomCode, gameState });
   }
 
+  public reconnectRoom(
+    roomCode: string,
+    playerId: string
+  ): Promise<{ success: boolean; room?: MultiplayerRoom; player?: RemotePlayer; gameState?: GameState; error?: string }> {
+    const socket = this.connect();
+    return new Promise((resolve) => {
+      socket.emit(
+        'room:reconnect',
+        { roomCode, playerId },
+        (res: { success: boolean; room?: MultiplayerRoom; player?: RemotePlayer; gameState?: GameState; error?: string }) => {
+          if (res.success && res.room && res.player) {
+            this.currentRoom = res.room;
+            this.myPlayer = res.player;
+          }
+          resolve(res);
+        }
+      );
+    });
+  }
+
   public disconnect(): void {
     if (this.socket) {
       this.socket.disconnect();
