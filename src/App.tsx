@@ -3,9 +3,14 @@ import heroImg from './assets/hero.png'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import './App.css'
+import { DemoScreen } from './components/DevTools/DemoScreen.tsx'
 
 function App() {
   const [count, setCount] = useState(0)
+
+  if (new URLSearchParams(window.location.search).get('demo') === '1') {
+    return <DemoScreen />
+  }
 
   return (
     <>

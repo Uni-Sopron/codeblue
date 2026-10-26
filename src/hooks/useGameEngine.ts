@@ -15,6 +15,8 @@ import { getTileById } from '../data/tiles.ts';
 import { EVENT_CARDS } from '../data/cards.ts';
 import { CLINIC_ELEMENTS, getClinicElementById } from '../data/clinicElements.ts';
 import { AVATARS } from '../data/avatars.ts';
+import { applyDevAction } from '../utils/devTools.ts';
+import type { DevAction } from '../utils/devTools.ts';
 
 export interface PlayerSetupConfig {
   id: PlayerId;
@@ -200,6 +202,7 @@ export function useGameEngine() {
   const rollDice = useCallback(() => {
     if (!activePlayer) return;
     if (gameState.phase !== 'roll') return;
+    if (gameState.isRolling || gameState.winner) return;
     if (hasRolledThisTurn && !extraRollAvailable) return;
 
     // Kockadobás (1 - 6)
@@ -210,7 +213,7 @@ export function useGameEngine() {
     setTimeout(() => {
       setGameState((prev) => {
         const currentP = prev.players[prev.activePlayerIndex];
-        if (!currentP) return prev;
+        if (!currentP || prev.phase !== 'roll' || !prev.isRolling) return prev;
 
         const oldPos = currentP.position;
         const newRawPos = oldPos + roll;
@@ -279,13 +282,14 @@ export function useGameEngine() {
         setExtraRollAvailable(false);
       }
     }, 400);
-  }, [activePlayer, gameState.phase, hasRolledThisTurn, extraRollAvailable]);
+  }, [activePlayer, gameState.phase, gameState.isRolling, gameState.winner, hasRolledThisTurn, extraRollAvailable]);
 
   /**
    * 3. Mező eseményének feldolgozása
    */
   const resolveTileAction = useCallback(() => {
     setGameState((prev) => {
+      if (prev.phase !== 'tile_action' || prev.winner) return prev;
       const currentP = prev.players[prev.activePlayerIndex];
       if (!currentP) return prev;
 
@@ -559,6 +563,7 @@ export function useGameEngine() {
    */
   const resolveCardAction = useCallback(() => {
     setGameState((prev) => {
+      if (prev.phase !== 'card_modal' || prev.winner) return prev;
       const currentP = prev.players[prev.activePlayerIndex];
       const card = prev.drawnCard;
       if (!currentP || !card) return { ...prev, phase: 'building', drawnCard: null };
@@ -742,7 +747,7 @@ export function useGameEngine() {
       return {
         ...prev,
         players: updatedPlayers,
-        phase: extraRollAvailable ? 'roll' : 'building',
+        phase: action.type === 'extra_roll' || extraRollAvailable ? 'roll' : 'building',
         drawnCard: null,
         logs: [...newLogs, ...prev.logs],
       };
@@ -1020,6 +1025,27 @@ export function useGameEngine() {
     setExtraRollAvailable(false);
   }, []);
 
+  // Explicit debug API keeps the panel on the same state as the real game.
+  const dispatchDevAction = useCallback((action: DevAction) => {
+    setGameState((prev) => applyDevAction(prev, action));
+  }, []);
+
+  const devAdjustCash = useCallback((playerId: PlayerId, amount: number) => {
+    dispatchDevAction({ type: 'adjust_cash', playerId, amount });
+  }, [dispatchDevAction]);
+
+  const devTeleport = useCallback((playerId: PlayerId, tileId: number) => {
+    dispatchDevAction({ type: 'teleport', playerId, tileId });
+  }, [dispatchDevAction]);
+
+  const devDrawCard = useCallback((cardId: number) => {
+    dispatchDevAction({ type: 'draw_card', cardId });
+  }, [dispatchDevAction]);
+
+  const devInstantVictory = useCallback(() => {
+    dispatchDevAction({ type: 'instant_victory' });
+  }, [dispatchDevAction]);
+
   return {
     gameState,
     activePlayer,
@@ -1036,5 +1062,9 @@ export function useGameEngine() {
     repayLoan,
     endTurn,
     resetGame,
+    devAdjustCash,
+    devTeleport,
+    devDrawCard,
+    devInstantVictory,
   };
 }
