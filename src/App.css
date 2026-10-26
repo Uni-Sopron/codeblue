@@ -367,6 +367,22 @@
   gap: 12px;
   width: 100%;
   max-width: 600px;
+  min-height: 44px;
+}
+
+.roll-hint-badge {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 20px;
+  padding: 6px 18px;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  font-weight: 500;
+  backdrop-filter: blur(8px);
+}
+
+.roll-hint-badge strong {
+  color: #38bdf8;
 }
 
 .building-phase-controls {

@@ -8,7 +8,6 @@ import {
   VolumeX,
   Play,
   ArrowRight,
-  Dices,
 } from 'lucide-react';
 import { BOARD_TILES } from './data/tiles.ts';
 import { AVATARS } from './data/avatars.ts';
@@ -51,10 +50,10 @@ export function App() {
   // Setup state
   const [playerCount, setPlayerCount] = useState<number>(4);
   const [playerNames, setPlayerNames] = useState<string[]>([
-    'Péter (Sebész)',
-    'Markó (Diagnoszta)',
-    'Anna (Főorvos)',
-    'Bence (Rezidens)',
+    '1. Orvos',
+    '2. Orvos',
+    '3. Orvos',
+    '4. Orvos',
   ]);
 
   // Current tile of active player
@@ -68,7 +67,7 @@ export function App() {
     const selectedAvatars = AVATARS.slice(0, playerCount);
     const configs = selectedAvatars.map((avatar, idx) => ({
       id: `p${idx + 1}` as PlayerId,
-      name: playerNames[idx]?.trim() || avatar.title,
+      name: playerNames[idx]?.trim() || `${idx + 1}. Játékos (${avatar.title})`,
       avatar: avatar.id,
       color: avatar.color,
     }));
@@ -255,7 +254,7 @@ export function App() {
                           newNames[idx] = e.target.value;
                           setPlayerNames(newNames);
                         }}
-                        placeholder={avatar.title}
+                        placeholder={`Pl. Dr. ${avatar.title}`}
                       />
                       <span className="setup-player-desc">{avatar.description}</span>
                     </div>
@@ -341,15 +340,9 @@ export function App() {
                 )}
 
                 {gameState.phase === 'roll' && (
-                  <button
-                    type="button"
-                    className="action-btn-primary"
-                    disabled={gameState.isRolling}
-                    onClick={handleRollDice}
-                  >
-                    <Dices size={20} className={gameState.isRolling ? 'animate-spin' : ''} />
-                    <span>{gameState.isRolling ? 'Dobás folyamatban...' : 'Kockadobás (Space)'}</span>
-                  </button>
+                  <div className="roll-hint-badge">
+                    <span>🎲 Nyomj <strong>Space</strong> billentyűt vagy kattints a fenti kockára a dobáshoz!</span>
+                  </div>
                 )}
               </div>
             </div>

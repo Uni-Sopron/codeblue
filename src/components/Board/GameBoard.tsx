@@ -114,13 +114,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
 
           {/* Central Interactive Hub */}
           <div className="center-content">
-            {/* Header: Game Title */}
-            <div className="center-header">
-              <span className="center-badge">HACKATHON 2026 EDITION</span>
-              <h1 className="center-title">
-                Code<span className="title-highlight">Blue</span>
-              </h1>
-              <p className="center-subtitle">Gazdálkodj okosan! – Magánklinika</p>
+            {/* Minimalist Center Pill */}
+            <div className="center-header-minimal">
+              <span className="center-badge-minimal">🏥 MAGÁNKLINIKA • KÖRRE OSZTOTT TÁRSAS</span>
             </div>
 
             {/* Active Turn HUD */}

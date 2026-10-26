@@ -5,7 +5,7 @@
   justify-content: space-between;
   width: 100%;
   height: 100%;
-  padding: 6px 8px;
+  padding: 4px 5px;
   background: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(8px);
   border-radius: 8px;
@@ -15,6 +15,7 @@
   overflow: hidden;
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   user-select: none;
+  min-width: 0;
 }
 
 .board-tile:hover {
@@ -103,12 +104,14 @@
 
 /* Body */
 .tile-body {
-  margin: 3px 0;
-  line-height: 1.15;
+  margin: 1px 0;
+  line-height: 1.12;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .tile-name {
-  font-size: 0.72rem;
+  font-size: 0.65rem;
   font-weight: 600;
   color: #f1f5f9;
   display: -webkit-box;
@@ -116,6 +119,8 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
+  word-break: break-word;
+  hyphens: auto;
 }
 
 /* Footer / Value Badge */

@@ -3,9 +3,9 @@
   justify-content: center;
   align-items: center;
   width: 100%;
-  max-width: 1100px;
+  max-width: 950px;
   margin: 0 auto;
-  padding: 10px;
+  padding: 6px;
   box-sizing: border-box;
 }
 
@@ -14,15 +14,15 @@
   display: grid;
   grid-template-columns: repeat(10, minmax(0, 1fr));
   grid-template-rows: repeat(10, minmax(0, 1fr));
-  gap: 5px;
+  gap: 4px;
   width: 100%;
   aspect-ratio: 1 / 1;
-  max-height: 90vh;
+  max-height: min(80vh, 850px);
   background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
-  border-radius: 20px;
+  border-radius: 16px;
   border: 2px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), inset 0 0 40px rgba(0, 0, 0, 0.5);
-  padding: 10px;
+  padding: 8px;
   box-sizing: border-box;
   position: relative;
 }
@@ -85,44 +85,24 @@
   padding: 10px 0;
 }
 
-/* Center Header */
-.center-header {
+/* Center Header Minimal */
+.center-header-minimal {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  justify-content: center;
+  margin-bottom: 2px;
 }
 
-.center-badge {
-  font-size: 0.68rem;
-  letter-spacing: 2px;
+.center-badge-minimal {
+  font-size: 0.65rem;
+  letter-spacing: 1.5px;
   font-weight: 800;
   color: #38bdf8;
   background: rgba(56, 189, 248, 0.12);
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  border: 1px solid rgba(56, 189, 248, 0.25);
   padding: 3px 12px;
-  border-radius: 20px;
-}
-
-.center-title {
-  margin: 4px 0 0 0;
-  font-size: 2.2rem;
-  font-weight: 900;
-  color: #ffffff;
-  letter-spacing: -0.5px;
-  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
-}
-
-.title-highlight {
-  color: #00b4d8;
-  text-shadow: 0 0 20px rgba(0, 180, 216, 0.5);
-}
-
-.center-subtitle {
-  margin: 0;
-  font-size: 0.85rem;
-  color: #94a3b8;
-  font-weight: 500;
+  border-radius: 9999px;
+  text-transform: uppercase;
 }
 
 /* Turn Card */
