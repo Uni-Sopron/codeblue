@@ -9,4 +9,11 @@ services:
       - "3001:3001"
     environment:
       - PORT=3001
-      - CORS_ORIGIN=*
+    networks:
+      - default
+      - proxy
+
+networks:
+  proxy:
+    name: nginx-proxy-network
+    external: true
