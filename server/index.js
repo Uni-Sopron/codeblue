@@ -2,12 +2,19 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicPath = path.join(__dirname, 'public');
 
 const PORT = process.env.PORT || 3001;
 const app = express();
 
 app.use(cors({ origin: '*' }));
 app.use(express.json());
+app.use(express.static(publicPath));
 
 // In-memory room storage
 // Key: roomCode (e.g. "CB-4821"), Value: Room object
@@ -37,7 +44,13 @@ app.get('/rooms', (req, res) => {
     gameStarted: r.gameStarted,
     createdAt: r.createdAt,
   }));
-  res.json({ rooms: publicRooms });
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/socket.io') || req.path === '/health' || req.path === '/rooms') {
+    return next();
+  }
+  res.sendFile(path.join(publicPath, 'index.html'), (err) => {
+    if (err) next();
+  });
 });
 
 const httpServer = createServer(app);
