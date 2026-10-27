@@ -211,11 +211,13 @@
 
 .setup-hero {
   position: relative;
-  height: 240px;
+  min-height: 240px;
   overflow: hidden;
 }
 
 .setup-hero-img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -223,8 +225,9 @@
 }
 
 .setup-hero-overlay {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  min-height: inherit;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -242,8 +245,9 @@
 }
 
 .setup-title {
-  margin: 6px 0;
+  margin: 6px 0 14px;
   font-size: 2.2rem;
+  line-height: 1.2;
   font-weight: 900;
   color: #ffffff;
 }
