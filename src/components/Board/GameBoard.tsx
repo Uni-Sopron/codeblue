@@ -2,6 +2,7 @@ import React from 'react';
 import type { Tile as TileType, Player } from '../../types/game.ts';
 import { getAvatarById } from '../../data/avatars.ts';
 import { Tile } from './Tile.tsx';
+import { TileIcon } from '../Common/TileIcon.tsx';
 import { DiceRoller } from '../Dice/DiceRoller.tsx';
 import './GameBoard.css';
 
@@ -50,6 +51,33 @@ const getTileGridStyle = (index: number): React.CSSProperties => {
   return {};
 };
 
+const getTooltipPosition = (index: number): 'bottom' | 'left' | 'top' | 'right' => {
+  if (index >= 0 && index <= 9) return 'bottom';
+  if (index >= 10 && index <= 17) return 'left';
+  if (index >= 18 && index <= 27) return 'top';
+  return 'right';
+};
+
+const getTypeLabel = (type: TileType['type']): string => {
+  switch (type) {
+    case 'start':
+      return 'START';
+    case 'income':
+      return 'Bevétel';
+    case 'expense':
+      return 'Kiadás';
+    case 'card':
+      return 'Esemény';
+    case 'purchase':
+      return 'Vásárlás';
+    case 'special':
+      return 'Speciális';
+    case 'neutral':
+    default:
+      return 'Pihenő';
+  }
+};
+
 export const GameBoard: React.FC<GameBoardProps> = ({
   tiles,
   players,
@@ -66,6 +94,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   const activeAvatar = activePlayer ? getAvatarById(activePlayer.avatar) : undefined;
   const currentTile = activePlayer ? tiles[activePlayer.position] : undefined;
 
+  const [hoveredTile, setHoveredTile] = React.useState<TileType | null>(null);
+  const [selectedTile, setSelectedTile] = React.useState<TileType | null>(null);
+
   // Group players by their current tile position
   const pawnsByTile = React.useMemo(() => {
     const map = new Map<number, Player[]>();
@@ -77,10 +108,18 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     return map;
   }, [players]);
 
+  const handleTileClick = (tile: TileType) => {
+    setSelectedTile(tile);
+    onTileClick?.(tile);
+  };
+
+  // Az aktív vagy megtekintett mező meghatározása a középső kártyához
+  const displayedTile = hoveredTile || (selectedTile && selectedTile.id !== currentTile?.id ? selectedTile : currentTile);
+
   return (
     <div className="game-board-wrapper">
       <div className="game-board-grid">
-        {/* Render 36 Perimeter Tiles */}
+        {/* Render 36 Perimeter Tiles (Minimalist Icons & Index) */}
         {tiles.map((tile) => {
           const pawnsOnTile = pawnsByTile.get(tile.id) || [];
           const isTarget = activePlayer?.position === tile.id;
@@ -96,7 +135,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 pawns={pawnsOnTile}
                 activePlayerId={activePlayer?.id}
                 isTargetTile={isTarget}
-                onClick={() => onTileClick?.(tile)}
+                tooltipPosition={getTooltipPosition(tile.id)}
+                onClick={() => handleTileClick(tile)}
+                onHover={setHoveredTile}
               />
             </div>
           );
@@ -116,11 +157,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({
 
           {/* Central Interactive Hub */}
           <div className="center-content">
-            {/* Minimalist Center Pill */}
-            <div className="center-header-minimal">
-              <span className="center-badge-minimal">🏥 MAGÁNKLINIKA • KÖRRE OSZTOTT TÁRSAS</span>
-            </div>
-
             {/* Active Turn HUD */}
             {activePlayer && (
               <div
@@ -167,17 +203,50 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               />
             </div>
 
-            {/* Current Tile / Status Feed */}
-            <div className="center-status-feed">
-              {statusMessage ? (
-                <div className="status-msg">{statusMessage}</div>
-              ) : currentTile ? (
-                <div className="status-tile-info">
-                  <span className="status-tile-name">{currentTile.name}</span>
-                  <span className="status-tile-desc">{currentTile.description}</span>
+            {/* Status Message Notification if any */}
+            {statusMessage && (
+              <div className="center-status-alert">
+                <span className="status-dot" />
+                <span className="status-text">{statusMessage}</span>
+              </div>
+            )}
+
+            {/* Interaktív Központi Mezőkártya (Landing / Hover / Selection Info) */}
+            {displayedTile && (
+              <div className={`center-landing-card landing-${displayedTile.type}`}>
+                <div className="landing-card-header">
+                  <div className="landing-tags">
+                    <span className="landing-source-pill">
+                      {hoveredTile
+                        ? `Megtekintés #${displayedTile.id}`
+                        : selectedTile && selectedTile.id !== currentTile?.id
+                        ? `Kijelölve #${displayedTile.id}`
+                        : `Aktuális mező #${displayedTile.id}`}
+                    </span>
+                    <span className={`landing-type-pill pill-${displayedTile.type}`}>
+                      <TileIcon name={displayedTile.icon} size={13} />
+                      <span>{getTypeLabel(displayedTile.type)}</span>
+                    </span>
+                  </div>
+
+                  {displayedTile.value !== undefined && (
+                    <span
+                      className={`landing-value-badge ${
+                        displayedTile.type === 'income' || displayedTile.type === 'start'
+                          ? 'badge-pos'
+                          : 'badge-neg'
+                      }`}
+                    >
+                      {displayedTile.type === 'income' || displayedTile.type === 'start' ? '+' : '-'}
+                      {displayedTile.value.toLocaleString('hu-HU')} KK
+                    </span>
+                  )}
                 </div>
-              ) : null}
-            </div>
+
+                <div className="landing-tile-title">{displayedTile.name}</div>
+                <div className="landing-tile-desc">{displayedTile.description}</div>
+              </div>
+            )}
           </div>
         </div>
       </div>
