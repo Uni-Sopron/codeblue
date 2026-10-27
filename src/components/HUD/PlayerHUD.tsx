@@ -48,7 +48,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
         )}
       </div>
 
-      <div className="players-cards-grid">
+      <div className="players-cards-grid" style={{ '--player-count': players.length } as React.CSSProperties}>
         {players.map((player, index) => {
           const isActive = index === activePlayerIndex;
           const isSelected = selectedPlayerIndex === index;

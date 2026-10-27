@@ -1,5 +1,7 @@
 .player-hud-container {
   width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
   background: rgba(15, 23, 42, 0.9);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(56, 189, 248, 0.2);
@@ -72,12 +74,13 @@
 /* Játékos kártyák listája */
 .players-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(var(--player-count), minmax(0, 1fr));
   gap: 0.6rem;
 }
 
 .player-card {
   position: relative;
+  min-width: 0;
   background: rgba(30, 41, 59, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -257,4 +260,16 @@
   background: rgba(245, 158, 11, 0.2);
   color: #fbbf24;
   border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+@media (max-width: 900px) {
+  .player-stats-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .players-cards-grid {
+    grid-template-columns: 1fr;
+  }
 }
