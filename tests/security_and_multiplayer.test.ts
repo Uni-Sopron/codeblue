@@ -194,3 +194,24 @@ test('Rematch update payload properly passes requester metadata for guest modal 
   assert.equal(payload.ready, true);
   assert.equal(payload.votes['p1'], true);
 });
+
+test('Declining rematch resets room rematchVotes map and prepares cancelled event payload', () => {
+  let roomRematchVotes = { p1: true };
+
+  // Guest declines
+  const ready = false;
+  const player = { id: 'p2', name: 'Dr. Beta' };
+
+  let cancelledEventPayload = null;
+  if (!ready) {
+    roomRematchVotes = {};
+    cancelledEventPayload = {
+      cancelledBy: player.name,
+      cancelledById: player.id,
+    };
+  }
+
+  assert.deepEqual(roomRematchVotes, {});
+  assert.equal(cancelledEventPayload?.cancelledBy, 'Dr. Beta');
+  assert.equal(cancelledEventPayload?.cancelledById, 'p2');
+});

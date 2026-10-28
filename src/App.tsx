@@ -217,6 +217,22 @@ export function App() {
       });
     };
 
+    const handleRematchCancelled = ({
+      cancelledBy,
+    }: {
+      cancelledBy: string;
+      cancelledById?: string;
+    }) => {
+      setIsRematchPromptOpen(false);
+      setRematchVotes({});
+      setRematchRequester(null);
+      setToastMessage({
+        id: Date.now(),
+        text: `❌ ${cancelledBy || 'A másik játékos'} nem fogadta el az új meccset. A jelenlegi játék folytatódik!`,
+        type: 'warning',
+      });
+    };
+
     const handleRematchUpdate = ({
       votes,
       requestedBy,
@@ -296,6 +312,7 @@ export function App() {
     socket.on('player:disconnected', handlePlayerDisconnected);
     socket.on('player:reconnected', handlePlayerReconnected);
     socket.on('room:rematch_update', handleRematchUpdate);
+    socket.on('room:rematch_cancelled', handleRematchCancelled);
     socket.on('room:game_reset', handleGameReset);
     socket.on('turn:auto_passed', handleTurnAutoPassed);
     socket.on('room:player_left', handlePlayerLeft);
@@ -306,6 +323,7 @@ export function App() {
       socket.off('player:disconnected', handlePlayerDisconnected);
       socket.off('player:reconnected', handlePlayerReconnected);
       socket.off('room:rematch_update', handleRematchUpdate);
+      socket.off('room:rematch_cancelled', handleRematchCancelled);
       socket.off('room:game_reset', handleGameReset);
       socket.off('turn:auto_passed', handleTurnAutoPassed);
       socket.off('room:player_left', handlePlayerLeft);

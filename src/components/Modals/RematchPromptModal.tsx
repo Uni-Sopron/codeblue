@@ -27,7 +27,7 @@ export const RematchPromptModal: React.FC<RematchPromptModalProps> = ({
   if (!isOpen) return null;
 
   const connectedPlayers = players.filter((p) => p.connected !== false);
-  const myVote = myPlayerId ? rematchVotes[myPlayerId] : false;
+  const myVote = myPlayerId ? !!rematchVotes[myPlayerId] : false;
 
   return (
     <div className="rematch-prompt-backdrop">
@@ -93,9 +93,20 @@ export const RematchPromptModal: React.FC<RematchPromptModalProps> = ({
         {/* Action buttons */}
         <div className="rematch-prompt-footer">
           {myVote ? (
-            <div className="rematch-waiting-notice">
-              <Check size={18} className="text-emerald-400" />
-              <span>Elfogadtad! Várakozás a többi játékos megerősítésére...</span>
+            <div className="rematch-waiting-container">
+              <div className="rematch-waiting-notice">
+                <Check size={18} className="text-emerald-400" />
+                <span>Elfogadtad! Várakozás a többi játékos megerősítésére...</span>
+              </div>
+              <button
+                type="button"
+                className="rematch-btn-cancel-waiting"
+                onClick={onDecline}
+                title="Kérelem visszavonása és meccs folytatása"
+              >
+                <X size={14} />
+                <span>Kérelem visszavonása</span>
+              </button>
             </div>
           ) : (
             <>

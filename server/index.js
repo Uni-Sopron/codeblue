@@ -396,7 +396,24 @@ io.on('connection', (socket) => {
       if (!player) return;
 
       if (!room.rematchVotes) room.rematchVotes = {};
-      room.rematchVotes[player.id] = !!ready;
+
+      if (!ready) {
+        room.rematchVotes = {};
+        io.to(normalizedCode).emit('room:rematch_cancelled', {
+          cancelledBy: player.name,
+          cancelledById: player.id,
+        });
+        io.to(normalizedCode).emit('room:rematch_update', {
+          votes: {},
+          requestedBy: player.name,
+          requestedById: player.id,
+          isHost: !!player.isHost,
+          ready: false,
+        });
+        return;
+      }
+
+      room.rematchVotes[player.id] = true;
       room.lastActive = Date.now();
 
       io.to(normalizedCode).emit('room:rematch_update', {
