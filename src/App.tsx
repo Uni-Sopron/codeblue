@@ -3,13 +3,13 @@ import {
   Building2,
   Landmark,
   Wrench,
-  RotateCcw,
   Volume2,
   VolumeX,
   Play,
   ArrowRight,
   ArrowLeft,
   Wifi,
+  Menu,
 } from 'lucide-react';
 import { BOARD_TILES } from './data/tiles.ts';
 import { AVATARS } from './data/avatars.ts';
@@ -31,6 +31,8 @@ import { CardModal } from './components/Modals/CardModal.tsx';
 import { BankModal } from './components/Modals/BankModal.tsx';
 import { GameOverModal } from './components/Modals/GameOverModal.tsx';
 import { ConfirmExitModal } from './components/Modals/ConfirmExitModal.tsx';
+import { GameMenuModal } from './components/Modals/GameMenuModal.tsx';
+import { RematchPromptModal } from './components/Modals/RematchPromptModal.tsx';
 import { DevPanel } from './components/DevTools/DevPanel.tsx';
 import './App.css';
 
@@ -56,6 +58,9 @@ export function App() {
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
   const [isConfirmExitOpen, setIsConfirmExitOpen] = useState(false);
+  const [isGameMenuOpen, setIsGameMenuOpen] = useState(false);
+  const [isRematchPromptOpen, setIsRematchPromptOpen] = useState(false);
+  const [rematchRequester, setRematchRequester] = useState<{ name: string; isHost: boolean } | null>(null);
 
   // Multiplayer and game mode state
   const [gameMode, setGameMode] = useState<'local' | 'online' | null>(null);
@@ -212,8 +217,29 @@ export function App() {
       });
     };
 
-    const handleRematchUpdate = ({ votes }: { votes: Record<string, boolean> }) => {
+    const handleRematchUpdate = ({
+      votes,
+      requestedBy,
+      isHost: requesterIsHost,
+      ready,
+    }: {
+      votes: Record<string, boolean>;
+      requestedBy?: string;
+      isHost?: boolean;
+      ready?: boolean;
+    }) => {
       setRematchVotes(votes || {});
+      if (requestedBy) {
+        setRematchRequester({ name: requestedBy, isHost: !!requesterIsHost });
+      }
+      if (ready && requestedBy) {
+        setIsRematchPromptOpen(true);
+        setToastMessage({
+          id: Date.now(),
+          text: `🔔 ${requestedBy} új meccs indítását kezdeményezte!`,
+          type: 'info',
+        });
+      }
     };
 
     const handleGameReset = ({
@@ -224,6 +250,10 @@ export function App() {
       gameState: GameState;
     }) => {
       setRematchVotes({});
+      setIsRematchPromptOpen(false);
+      setIsGameMenuOpen(false);
+      setIsConfirmExitOpen(false);
+      setRematchRequester(null);
       setTurnTimeoutRemaining(null);
       setOnlineRoom(resetRoom);
       isRemoteUpdateRef.current = true;
@@ -434,11 +464,12 @@ export function App() {
 
             <button
               type="button"
-              className="header-btn btn-reset"
-              onClick={() => setIsConfirmExitOpen(true)}
-              title={gameMode === 'online' ? 'Szoba és játék kezelése' : 'Játék újraindítása'}
+              className="header-btn btn-menu"
+              onClick={() => setIsGameMenuOpen(true)}
+              title="Játék Menü"
             >
-              <RotateCcw size={16} />
+              <Menu size={16} />
+              <span>Menü</span>
             </button>
           </div>
         )}
@@ -711,8 +742,67 @@ export function App() {
             setOnlineRoom(null);
             setMyRemotePlayer(null);
           }
+          engine.restartCurrentMatch();
+          setGameMode(null);
+        }}
+      />
+
+      {/* 4.5 In-Game Menu Modal */}
+      <GameMenuModal
+        isOpen={isGameMenuOpen}
+        onClose={() => setIsGameMenuOpen(false)}
+        gameMode={gameMode}
+        isHost={!gameMode || gameMode === 'local' || !!myRemotePlayer?.isHost}
+        soundEnabled={audio.soundEnabled}
+        onToggleSound={() => audio.setSoundEnabled(!audio.soundEnabled)}
+        onOpenDevPanel={() => setIsDevPanelOpen(true)}
+        onRestartMatch={() => {
+          if (gameMode === 'online' && onlineRoom) {
+            multiplayerService.voteRematch(onlineRoom.code, true);
+            setIsRematchPromptOpen(true);
+            setToastMessage({
+              id: Date.now(),
+              text: 'Új meccset kezdeményeztél! Várakozás a többi játékos megerősítésére...',
+              type: 'info',
+            });
+          } else {
+            engine.restartCurrentMatch();
+            setToastMessage({
+              id: Date.now(),
+              text: '🔄 Új meccs elindult a táblán a kiválasztott orvosokkal!',
+              type: 'success',
+            });
+          }
+        }}
+        onExitToMainMenu={() => {
+          if (gameMode === 'online' && onlineRoom) {
+            multiplayerService.leaveRoom(onlineRoom.code);
+            setOnlineRoom(null);
+            setMyRemotePlayer(null);
+          }
           engine.resetGame();
           setGameMode(null);
+        }}
+      />
+
+      {/* 4.6 Rematch Prompt Modal for Multiplayer */}
+      <RematchPromptModal
+        isOpen={isRematchPromptOpen && gameMode === 'online' && !gameState.winner}
+        requestedBy={rematchRequester?.name}
+        isHostRequester={rematchRequester?.isHost}
+        players={gameState.players}
+        rematchVotes={rematchVotes}
+        myPlayerId={myRemotePlayer?.id}
+        onAccept={() => {
+          if (onlineRoom) {
+            multiplayerService.voteRematch(onlineRoom.code, true);
+          }
+        }}
+        onDecline={() => {
+          if (onlineRoom) {
+            multiplayerService.voteRematch(onlineRoom.code, false);
+          }
+          setIsRematchPromptOpen(false);
         }}
       />
 

@@ -401,6 +401,10 @@ io.on('connection', (socket) => {
 
       io.to(normalizedCode).emit('room:rematch_update', {
         votes: room.rematchVotes,
+        requestedBy: player.name,
+        requestedById: player.id,
+        isHost: !!player.isHost,
+        ready: !!ready,
       });
 
       // Check if all connected players have voted ready

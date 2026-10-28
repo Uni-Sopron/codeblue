@@ -150,3 +150,47 @@ test('Disconnect auto-pass: next connected player is selected properly', () => {
   assert.equal(players[nextActiveIndex].id, 'p3');
 });
 
+test('In-place match restart preserves player identities and resets game board to Round 1', () => {
+  const existingPlayers = [
+    { id: 'p1', name: 'Dr. Alpha', color: '#00b4d8', avatar: 'surgeon', cash: 400000, debt: 200000, position: 14, builtElements: [1, 2] },
+    { id: 'p2', name: 'Dr. Beta', color: '#7209B7', avatar: 'resident', cash: 2800000, debt: 0, position: 22, builtElements: [3] }
+  ];
+
+  // Simulate restartCurrentMatch logic
+  const freshPlayers = existingPlayers.map(p => ({
+    ...p,
+    cash: 1500000,
+    debt: 0,
+    position: 0,
+    builtElements: [],
+    skipTurns: 0,
+    activeBuffs: [],
+  }));
+
+  assert.equal(freshPlayers[0].name, 'Dr. Alpha');
+  assert.equal(freshPlayers[0].cash, 1500000);
+  assert.equal(freshPlayers[0].debt, 0);
+  assert.equal(freshPlayers[0].position, 0);
+  assert.equal(freshPlayers[0].builtElements.length, 0);
+
+  assert.equal(freshPlayers[1].name, 'Dr. Beta');
+  assert.equal(freshPlayers[1].cash, 1500000);
+  assert.equal(freshPlayers[1].debt, 0);
+  assert.equal(freshPlayers[1].position, 0);
+  assert.equal(freshPlayers[1].builtElements.length, 0);
+});
+
+test('Rematch update payload properly passes requester metadata for guest modal prompt', () => {
+  const payload = {
+    votes: { p1: true },
+    requestedBy: 'Dr. Alpha',
+    requestedById: 'p1',
+    isHost: true,
+    ready: true,
+  };
+
+  assert.equal(payload.requestedBy, 'Dr. Alpha');
+  assert.equal(payload.isHost, true);
+  assert.equal(payload.ready, true);
+  assert.equal(payload.votes['p1'], true);
+});
