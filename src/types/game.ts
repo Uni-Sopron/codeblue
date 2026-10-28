@@ -35,6 +35,15 @@ export interface ActiveBuff {
   remainingTurns: number;
 }
 
+export type BankProduct = 'savings' | 'clinicalBond' | 'biotechEquity';
+
+/** A hozam a termék egyenlegét növeli; csak visszaváltáskor válik készpénzzé. */
+export interface BankBalances {
+  savings: number;
+  clinicalBond: number;
+  biotechEquity: number;
+}
+
 export interface Player {
   id: PlayerId;
   name: string;
@@ -48,6 +57,7 @@ export interface Player {
   skipTurns: number;      // Körből kimaradás büntetés számláló
   activeBuffs: ActiveBuff[];
   isAI?: boolean;
+  bank?: BankBalances;    // Régi mentésekből hiányozhat; a motor nullás egyenleggel tölti fel.
 }
 
 // ==========================================
