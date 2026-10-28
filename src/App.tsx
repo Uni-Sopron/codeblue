@@ -128,6 +128,12 @@ export function App() {
       setOnlineRoom(startedRoom);
       setMyRemotePlayer(me);
 
+      if (startedRoom.gameState) {
+        isRemoteUpdateRef.current = true;
+        engine.setFullGameState(startedRoom.gameState);
+        return;
+      }
+
       const configs = startedRoom.players.map((p, idx) => {
         const avatarInfo = AVATARS.find((a) => a.id === p.avatar) || AVATARS[idx % AVATARS.length];
         return {
