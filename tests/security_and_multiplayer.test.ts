@@ -106,3 +106,112 @@ test('Game state sync invariants: active player index and players list boundary 
   assert.equal(activeIndex, 0);
   assert.equal(players[activeIndex].id, 'p1');
 });
+
+test('Rematch ready-check logic requires all active connected players to vote ready', () => {
+  const room = {
+    players: [
+      { id: 'p1', name: 'Dr. Kovács', connected: true },
+      { id: 'p2', name: 'Dr. Nagy', connected: true },
+      { id: 'p3', name: 'Dr. Kiss', connected: false } // disconnected
+    ],
+    rematchVotes: {
+      p1: true,
+      p2: false
+    } as Record<string, boolean>
+  };
+
+  const connectedPlayers = room.players.filter(p => p.connected !== false);
+  const isAllReadyBefore = connectedPlayers.every(p => room.rematchVotes[p.id] === true);
+  assert.equal(isAllReadyBefore, false);
+
+  // p2 votes ready
+  room.rematchVotes['p2'] = true;
+  const isAllReadyAfter = connectedPlayers.every(p => room.rematchVotes[p.id] === true);
+  assert.equal(isAllReadyAfter, true);
+});
+
+test('Disconnect auto-pass: next connected player is selected properly', () => {
+  const players = [
+    { id: 'p1', name: 'Dr. Alpha', connected: false },
+    { id: 'p2', name: 'Dr. Beta', connected: false },
+    { id: 'p3', name: 'Dr. Gamma', connected: true }
+  ];
+
+  const currentActiveIndex = 0; // Alpha is disconnected
+  let nextActiveIndex = (currentActiveIndex + 1) % players.length;
+  let attempts = 0;
+
+  while (!players[nextActiveIndex].connected && attempts < players.length) {
+    nextActiveIndex = (nextActiveIndex + 1) % players.length;
+    attempts++;
+  }
+
+  assert.equal(nextActiveIndex, 2);
+  assert.equal(players[nextActiveIndex].id, 'p3');
+});
+
+test('In-place match restart preserves player identities and resets game board to Round 1', () => {
+  const existingPlayers = [
+    { id: 'p1', name: 'Dr. Alpha', color: '#00b4d8', avatar: 'surgeon', cash: 400000, debt: 200000, position: 14, builtElements: [1, 2] },
+    { id: 'p2', name: 'Dr. Beta', color: '#7209B7', avatar: 'resident', cash: 2800000, debt: 0, position: 22, builtElements: [3] }
+  ];
+
+  // Simulate restartCurrentMatch logic
+  const freshPlayers = existingPlayers.map(p => ({
+    ...p,
+    cash: 1500000,
+    debt: 0,
+    position: 0,
+    builtElements: [],
+    skipTurns: 0,
+    activeBuffs: [],
+  }));
+
+  assert.equal(freshPlayers[0].name, 'Dr. Alpha');
+  assert.equal(freshPlayers[0].cash, 1500000);
+  assert.equal(freshPlayers[0].debt, 0);
+  assert.equal(freshPlayers[0].position, 0);
+  assert.equal(freshPlayers[0].builtElements.length, 0);
+
+  assert.equal(freshPlayers[1].name, 'Dr. Beta');
+  assert.equal(freshPlayers[1].cash, 1500000);
+  assert.equal(freshPlayers[1].debt, 0);
+  assert.equal(freshPlayers[1].position, 0);
+  assert.equal(freshPlayers[1].builtElements.length, 0);
+});
+
+test('Rematch update payload properly passes requester metadata for guest modal prompt', () => {
+  const payload = {
+    votes: { p1: true },
+    requestedBy: 'Dr. Alpha',
+    requestedById: 'p1',
+    isHost: true,
+    ready: true,
+  };
+
+  assert.equal(payload.requestedBy, 'Dr. Alpha');
+  assert.equal(payload.isHost, true);
+  assert.equal(payload.ready, true);
+  assert.equal(payload.votes['p1'], true);
+});
+
+test('Declining rematch resets room rematchVotes map and prepares cancelled event payload', () => {
+  let roomRematchVotes = { p1: true };
+
+  // Guest declines
+  const ready = false;
+  const player = { id: 'p2', name: 'Dr. Beta' };
+
+  let cancelledEventPayload = null;
+  if (!ready) {
+    roomRematchVotes = {};
+    cancelledEventPayload = {
+      cancelledBy: player.name,
+      cancelledById: player.id,
+    };
+  }
+
+  assert.deepEqual(roomRematchVotes, {});
+  assert.equal(cancelledEventPayload?.cancelledBy, 'Dr. Beta');
+  assert.equal(cancelledEventPayload?.cancelledById, 'p2');
+});

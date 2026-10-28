@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Player } from '../../types/game.ts';
 import { CLINIC_ELEMENTS } from '../../data/clinicElements.ts';
-import { Trophy, CheckCircle2, RotateCcw } from 'lucide-react';
+import { Trophy, CheckCircle2, RotateCcw, LogOut } from 'lucide-react';
 import './GameOverModal.css';
 
 interface GameOverModalProps {
@@ -9,6 +9,12 @@ interface GameOverModalProps {
   winner: Player | null;
   turnNumber: number;
   onNewGame: () => void;
+  gameMode?: 'local' | 'online' | null;
+  players?: Player[];
+  myPlayerId?: string;
+  rematchVotes?: Record<string, boolean>;
+  onVoteRematch?: (ready: boolean) => void;
+  onLeaveRoom?: () => void;
 }
 
 export const GameOverModal: React.FC<GameOverModalProps> = ({
@@ -16,10 +22,19 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   winner,
   turnNumber,
   onNewGame,
+  gameMode = 'local',
+  players = [],
+  myPlayerId,
+  rematchVotes = {},
+  onVoteRematch,
+  onLeaveRoom,
 }) => {
   if (!isOpen || !winner) {
     return null;
   }
+
+  const isOnline = gameMode === 'online';
+  const isMyVoteReady = myPlayerId ? rematchVotes[myPlayerId] === true : false;
 
   return (
     <div className="game-over-backdrop">
@@ -58,7 +73,11 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           </div>
           <div className="elements-completed-grid">
             {CLINIC_ELEMENTS.map((el) => (
-              <div key={el.id} className="element-completed-chip" title={`${el.name} (${el.cost.toLocaleString('hu-HU')} KK)`}>
+              <div
+                key={el.id}
+                className="element-completed-chip"
+                title={`${el.name} (${el.cost.toLocaleString('hu-HU')} KK)`}
+              >
                 <CheckCircle2 size={14} className="element-check-icon" />
                 <span className="element-chip-label">{el.name}</span>
               </div>
@@ -86,10 +105,58 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           </div>
         </div>
 
-        <button type="button" className="btn-new-game" onClick={onNewGame}>
-          <RotateCcw size={18} />
-          <span>Új játék indítása</span>
-        </button>
+        {/* Online Visszavágó Rendszer */}
+        {isOnline ? (
+          <div className="rematch-panel">
+            <h3 className="rematch-title">Visszavágó és Új Meccs</h3>
+            <p className="rematch-subtitle">
+              Amint minden játékos kész, a szoba azonnal újraindul az 1. körtől!
+            </p>
+
+            <div className="rematch-players-list">
+              {players.map((p) => {
+                const isReady = rematchVotes[p.id] === true;
+                const isMe = p.id === myPlayerId;
+                return (
+                  <div key={p.id} className={`rematch-player-item ${isReady ? 'ready' : ''}`}>
+                    <span className="rematch-player-dot" style={{ backgroundColor: p.color }} />
+                    <span className="rematch-player-name">
+                      {p.name} {isMe ? '(Te)' : ''}
+                    </span>
+                    <span
+                      className={`rematch-player-badge ${isReady ? 'badge-ready' : 'badge-waiting'}`}
+                    >
+                      {isReady ? 'Kész ✓' : 'Várakozás...'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="rematch-actions-row">
+              <button
+                type="button"
+                className={`btn-vote-rematch ${isMyVoteReady ? 'active' : ''}`}
+                onClick={() => onVoteRematch?.(!isMyVoteReady)}
+              >
+                <RotateCcw size={18} />
+                <span>{isMyVoteReady ? 'Készen állsz! (Visszavonás)' : 'Visszavágót kérek'}</span>
+              </button>
+
+              {onLeaveRoom && (
+                <button type="button" className="btn-leave-rematch" onClick={onLeaveRoom}>
+                  <LogOut size={16} />
+                  <span>Kilépés a Menübe</span>
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="btn-new-game" onClick={onNewGame}>
+            <RotateCcw size={18} />
+            <span>Új játék indítása</span>
+          </button>
+        )}
       </div>
     </div>
   );

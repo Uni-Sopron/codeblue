@@ -159,6 +159,8 @@ io.on('connection', (socket) => {
         players: [hostPlayer],
         gameStarted: false,
         gameState: null,
+        rematchVotes: {},
+        disconnectTimer: null,
         createdAt: new Date().toISOString(),
         lastActive: Date.now(),
       };
@@ -357,6 +359,11 @@ io.on('connection', (socket) => {
         return;
       }
 
+      if (room.disconnectTimer) {
+        clearTimeout(room.disconnectTimer);
+        room.disconnectTimer = null;
+      }
+
       player.socketId = socket.id;
       player.connected = true;
       socket.join(normalizedCode);
@@ -366,6 +373,10 @@ io.on('connection', (socket) => {
       console.log(`[Player Reconnected] ${player.name} (${player.id}) in room ${normalizedCode}`);
       const response = { success: true, room, player, gameState: room.gameState };
       if (typeof callback === 'function') callback(response);
+      io.to(normalizedCode).emit('player:reconnected', {
+        playerId: player.id,
+        playerName: player.name,
+      });
       io.to(normalizedCode).emit('room:update', { room });
     } catch (err) {
       console.error('[room:reconnect error]', err);
@@ -373,7 +384,143 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 7. Handle disconnect
+  // 7. Rematch Vote & Synchronized Game Reset
+  socket.on('room:rematch_vote', ({ roomCode, ready }) => {
+    try {
+      if (isRateLimited(socket.id)) return;
+      const normalizedCode = roomCode?.trim().toUpperCase();
+      const room = rooms.get(normalizedCode);
+      if (!room) return;
+
+      const player = room.players.find((p) => p.socketId === socket.id);
+      if (!player) return;
+
+      if (!room.rematchVotes) room.rematchVotes = {};
+
+      if (!ready) {
+        room.rematchVotes = {};
+        io.to(normalizedCode).emit('room:rematch_cancelled', {
+          cancelledBy: player.name,
+          cancelledById: player.id,
+        });
+        io.to(normalizedCode).emit('room:rematch_update', {
+          votes: {},
+          requestedBy: player.name,
+          requestedById: player.id,
+          isHost: !!player.isHost,
+          ready: false,
+        });
+        return;
+      }
+
+      room.rematchVotes[player.id] = true;
+      room.lastActive = Date.now();
+
+      io.to(normalizedCode).emit('room:rematch_update', {
+        votes: room.rematchVotes,
+        requestedBy: player.name,
+        requestedById: player.id,
+        isHost: !!player.isHost,
+        ready: !!ready,
+      });
+
+      // Check if all connected players have voted ready
+      const connectedPlayers = room.players.filter((p) => p.connected);
+      const allReady =
+        connectedPlayers.length >= 2 &&
+        connectedPlayers.every((p) => room.rematchVotes[p.id] === true);
+
+      if (allReady) {
+        room.rematchVotes = {};
+        if (room.disconnectTimer) {
+          clearTimeout(room.disconnectTimer);
+          room.disconnectTimer = null;
+        }
+
+        const freshPlayers = room.players.map((p, idx) => ({
+          id: `p${idx + 1}`,
+          name: p.name,
+          color: p.color,
+          avatar: p.avatar,
+          avatarTitle: p.avatarTitle,
+          cash: 1500000,
+          debt: 0,
+          position: 0,
+          builtElements: [],
+          skipTurns: 0,
+          activeBuffs: [],
+          connected: p.connected,
+          isHost: p.isHost,
+        }));
+
+        const freshGameState = {
+          phase: 'roll',
+          players: freshPlayers,
+          activePlayerIndex: 0,
+          roundNumber: 1,
+          dice: [1, 1],
+          isRolling: false,
+          pendingEvent: null,
+          lastRollSum: 2,
+          winner: null,
+          lastEventMessage: 'Új játék indult! Visszavágó kezdetét vette.',
+        };
+
+        room.gameStarted = true;
+        room.gameState = freshGameState;
+        room.lastActive = Date.now();
+
+        console.log(`[Rematch Triggered] Room ${normalizedCode} reset and started fresh!`);
+        io.to(normalizedCode).emit('room:game_reset', {
+          roomCode: normalizedCode,
+          room,
+          gameState: freshGameState,
+        });
+      }
+    } catch (err) {
+      console.error('[room:rematch_vote error]', err);
+    }
+  });
+
+  // 8. Clean Room Leave
+  socket.on('room:leave', ({ roomCode }) => {
+    try {
+      const normalizedCode = roomCode?.trim().toUpperCase();
+      const room = rooms.get(normalizedCode);
+      if (!room) return;
+
+      const playerIndex = room.players.findIndex((p) => p.socketId === socket.id);
+      if (playerIndex !== -1) {
+        const leavingPlayer = room.players[playerIndex];
+        socket.leave(normalizedCode);
+        currentRoomCode = null;
+
+        if (!room.gameStarted) {
+          room.players.splice(playerIndex, 1);
+          if (leavingPlayer.isHost && room.players.length > 0) {
+            room.players[0].isHost = true;
+            room.hostSocketId = room.players[0].socketId;
+          }
+          if (room.players.length === 0) {
+            rooms.delete(normalizedCode);
+          } else {
+            io.to(normalizedCode).emit('room:update', { room });
+          }
+        } else {
+          leavingPlayer.connected = false;
+          io.to(normalizedCode).emit('player:disconnected', {
+            playerId: leavingPlayer.id,
+            playerName: leavingPlayer.name,
+            reason: 'left',
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[room:leave error]', err);
+    }
+  });
+
+  // 9. Handle disconnect with Turn Timeout Watchdog
   socket.on('disconnect', () => {
     console.log(`[Socket] Client disconnected: ${socket.id}`);
     socketMessageCounts.delete(socket.id);
@@ -406,10 +553,59 @@ io.on('connection', (socket) => {
             // In active game: preserve state and allow reconnection
             leavingPlayer.connected = false;
             room.lastActive = Date.now();
-            io.to(currentRoomCode).emit('player:disconnected', {
-              playerId: leavingPlayer.id,
-              playerName: leavingPlayer.name,
-            });
+
+            const isActivePlayer =
+              room.gameState &&
+              room.gameState.activePlayerIndex === playerIndex;
+
+            if (isActivePlayer) {
+              if (room.disconnectTimer) {
+                clearTimeout(room.disconnectTimer);
+              }
+              const timeoutSeconds = 30;
+              io.to(currentRoomCode).emit('player:disconnected', {
+                playerId: leavingPlayer.id,
+                playerName: leavingPlayer.name,
+                timeoutSeconds,
+                isActivePlayer: true,
+              });
+
+              room.disconnectTimer = setTimeout(() => {
+                const activeRoom = rooms.get(currentRoomCode);
+                if (
+                  activeRoom &&
+                  activeRoom.gameState &&
+                  activeRoom.gameState.activePlayerIndex === playerIndex &&
+                  !leavingPlayer.connected
+                ) {
+                  // Auto-pass turn to next player
+                  activeRoom.gameState.activePlayerIndex =
+                    (activeRoom.gameState.activePlayerIndex + 1) %
+                    activeRoom.players.length;
+                  activeRoom.gameState.phase = 'roll';
+                  activeRoom.gameState.isRolling = false;
+                  activeRoom.gameState.pendingEvent = null;
+                  activeRoom.gameState.lastEventMessage = `${leavingPlayer.name} távolléte miatt a kör automatikusan átadásra került.`;
+
+                  console.log(
+                    `[Turn Auto-Passed] Room ${currentRoomCode} advanced turn due to timeout of ${leavingPlayer.name}`
+                  );
+                  io.to(currentRoomCode).emit('game:sync_broadcast', {
+                    gameState: activeRoom.gameState,
+                  });
+                  io.to(currentRoomCode).emit('turn:auto_passed', {
+                    newActivePlayerIndex: activeRoom.gameState.activePlayerIndex,
+                    gameState: activeRoom.gameState,
+                  });
+                }
+              }, timeoutSeconds * 1000);
+            } else {
+              io.to(currentRoomCode).emit('player:disconnected', {
+                playerId: leavingPlayer.id,
+                playerName: leavingPlayer.name,
+                isActivePlayer: false,
+              });
+            }
           }
         }
       }

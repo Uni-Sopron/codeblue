@@ -1040,6 +1040,49 @@ export function useGameEngine() {
     setExtraRollAvailable(false);
   }, []);
 
+  /**
+   * 9.1 Meccs újraindítása helyben a táblán (orvosok megtartásával, főmenübe lépés nélkül)
+   */
+  const restartCurrentMatch = useCallback(() => {
+    setGameState((prev) => {
+      const freshPlayers = prev.players.map((p) => ({
+        ...p,
+        cash: 1500000,
+        debt: 0,
+        position: 0,
+        builtElements: [],
+        skipTurns: 0,
+        activeBuffs: [],
+      }));
+      return {
+        ...prev,
+        players: freshPlayers,
+        activePlayerIndex: 0,
+        turnNumber: 1,
+        phase: 'roll',
+        diceResult: null,
+        isRolling: false,
+        drawnCard: null,
+        cardDeck: shuffleArray(EVENT_CARDS.map((c) => c.id)),
+        discardDeck: [],
+        winner: null,
+        roundPassBonusGranted: false,
+        logs: [
+          ...prev.logs,
+          {
+            id: `log-${Date.now()}`,
+            timestamp: Date.now(),
+            message: '🔄 Új mérkőzés indult a táblán a kiválasztott orvosokkal!',
+            type: 'system',
+          },
+        ],
+      };
+    });
+    setHasRolledThisTurn(false);
+    setHasBuiltThisTurn(false);
+    setExtraRollAvailable(false);
+  }, []);
+
   // Explicit debug API keeps the panel on the same state as the real game.
   const dispatchDevAction = useCallback((action: DevAction) => {
     setGameState((prev) => applyDevAction(prev, action));
@@ -1061,19 +1104,23 @@ export function useGameEngine() {
     dispatchDevAction({ type: 'instant_victory' });
   }, [dispatchDevAction]);
 
-  const setFullGameState = useCallback((newState: GameState) => {
-    setGameState({
-      ...newState,
-      players: newState.players.map((player) => ({ ...player, bank: getBankBalances(player) })),
-      winner: newState.winner ? { ...newState.winner, bank: getBankBalances(newState.winner) } : null,
+  const setFullGameState = useCallback((newStateOrUpdater: GameState | ((prev: GameState) => GameState)) => {
+    setGameState((prev) => {
+      const resolved = typeof newStateOrUpdater === 'function' ? newStateOrUpdater(prev) : newStateOrUpdater;
+      const normalizedState: GameState = {
+        ...resolved,
+        players: resolved.players.map((player) => ({ ...player, bank: getBankBalances(player) })),
+        winner: resolved.winner ? { ...resolved.winner, bank: getBankBalances(resolved.winner) } : null,
+      };
+      if (normalizedState.phase === 'roll') {
+        setHasRolledThisTurn(false);
+        setHasBuiltThisTurn(false);
+        setExtraRollAvailable(false);
+      } else if (normalizedState.phase === 'building' || normalizedState.phase === 'tile_action') {
+        setHasRolledThisTurn(true);
+      }
+      return normalizedState;
     });
-    if (newState.phase === 'roll') {
-      setHasRolledThisTurn(false);
-      setHasBuiltThisTurn(false);
-      setExtraRollAvailable(false);
-    } else if (newState.phase === 'building' || newState.phase === 'tile_action') {
-      setHasRolledThisTurn(true);
-    }
   }, []);
 
   return {
@@ -1093,6 +1140,7 @@ export function useGameEngine() {
     depositBank,
     withdrawBank,
     endTurn,
+    restartCurrentMatch,
     resetGame,
     setFullGameState,
     devAdjustCash,

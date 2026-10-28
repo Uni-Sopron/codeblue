@@ -58,6 +58,8 @@ export interface Player {
   activeBuffs: ActiveBuff[];
   isAI?: boolean;
   bank?: BankBalances;    // Régi mentésekből hiányozhat; a motor nullás egyenleggel tölti fel.
+  connected?: boolean;
+  isHost?: boolean;
 }
 
 // ==========================================
