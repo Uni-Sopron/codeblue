@@ -42,7 +42,7 @@ export function DemoScreen() {
     <main className="demo-screen">
       <header className="demo-header">
         <div className="demo-brand"><Stethoscope aria-hidden="true" /><span>CODE<span>BLUE</span></span></div>
-        <span className="demo-badge">Zsűri bemutató</span>
+        <span className="demo-badge">Fejlesztői bemutató</span>
       </header>
 
       <section className="demo-intro" aria-labelledby="demo-title">

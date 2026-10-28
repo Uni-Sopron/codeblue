@@ -121,7 +121,7 @@ export const GameMenuModal: React.FC<GameMenuModalProps> = ({
               <Wrench size={20} />
             </div>
             <div className="menu-item-content">
-              <span className="menu-item-title">Zsűri Tesztpanel</span>
+              <span className="menu-item-title">Fejlesztői Tesztpanel</span>
               <span className="menu-item-desc">Teleportálás, kártyahúzás és egyenleg állítás</span>
             </div>
           </button>

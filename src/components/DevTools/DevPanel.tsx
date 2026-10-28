@@ -65,7 +65,7 @@ export function DevPanel({
     <details className="dev-panel">
       <summary className="dev-panel__summary">
         <span className="dev-panel__summary-copy">
-          <span className="dev-panel__title">Zsűri tesztpanel</span>
+          <span className="dev-panel__title">Fejlesztői tesztpanel</span>
         </span>
       </summary>
 

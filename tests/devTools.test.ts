@@ -69,7 +69,7 @@ test('cash edits target the selected player, preserve the input and record the c
     assert.equal(after.activePlayerIndex, 1);
     assert.equal(after.phase, before.phase);
     assert.equal(after.logs[0].playerId, 'p1');
-    assert.match(after.logs[0].message, /Zsűri teszt/);
+    assert.match(after.logs[0].message, /Fejlesztői teszt/);
     assert.strictEqual(after.logs[1], before.logs[0]);
     assert.equal(JSON.stringify(before), snapshot);
   }

@@ -95,7 +95,7 @@ export function applyDevAction(state: GameState, action: DevAction): GameState {
       id: `dev_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
       playerId: player.id,
       playerName: player.name,
-      message: `[Zsűri teszt] ${message}`,
+      message: `[Fejlesztői teszt] ${message}`,
       timestamp: Date.now(),
       type: 'system' as const,
     }, ...state.logs].slice(0, 100),

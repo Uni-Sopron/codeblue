@@ -579,10 +579,10 @@ export function App() {
               type="button"
               className={`header-btn btn-dev ${isDevPanelOpen ? 'btn-active' : ''}`}
               onClick={() => setIsDevPanelOpen((prev) => !prev)}
-              title="Zsűri bemutató és tesztpanel"
+              title="Fejlesztői bemutató és tesztpanel"
             >
               <Wrench size={16} />
-              <span>Zsűri Mód</span>
+              <span>Fejlesztői Mód</span>
             </button>
 
             <button
