@@ -1,4 +1,4 @@
-export type SoundEffect = 'dice' | 'money' | 'card' | 'victory';
+export type SoundEffect = 'dice' | 'money' | 'penalty' | 'build' | 'siren' | 'card' | 'victory';
 
 const SOUND_PREFERENCE_KEY = 'codeblue.soundEnabled';
 const MASTER_VOLUME = 0.35;
@@ -187,6 +187,39 @@ function synthesize(audio: AudioEngine, effect: SoundEffect): void {
       [1_046.5, 1_318.51, 1_567.98].forEach((frequency, index) => {
         tone(audio, start + index * 0.07, frequency, 0.3, 0.28);
         tone(audio, start + index * 0.07, frequency * 2, 0.13, 0.06);
+      });
+      break;
+    case 'penalty':
+      // Enyhe tompa koppanás és lefelé lépdelő mélyebb hangok a kiadásokhoz / bírságokhoz.
+      noiseBurst(audio, start, 0.08, 0.35, 500, 120);
+      [
+        { offset: 0, freq: 311.13, duration: 0.12, volume: 0.22 },
+        { offset: 0.09, freq: 261.63, duration: 0.12, volume: 0.22 },
+        { offset: 0.18, freq: 196.0, duration: 0.28, volume: 0.25 },
+      ].forEach(({ offset, freq, duration, volume }) => {
+        tone(audio, start + offset, freq, duration, volume, 'triangle');
+      });
+      break;
+    case 'build':
+      // Ünnepélyes klinikai átadás: strukturális koppanás + fényes C-dúr akkordbontás.
+      noiseBurst(audio, start, 0.04, 0.35, 1_200, 300);
+      tone(audio, start, 440, 0.05, 0.15, 'triangle');
+      [523.25, 659.25, 783.99, 1_046.5].forEach((frequency, index) => {
+        const offset = [0.05, 0.11, 0.17, 0.24][index];
+        const duration = [0.2, 0.2, 0.25, 0.4][index];
+        const volume = [0.2, 0.22, 0.24, 0.28][index];
+        tone(audio, start + offset, frequency, duration, volume, 'sine');
+      });
+      break;
+    case 'siren':
+      // Kétciklusos európai mentősziréna váltókürt (A4 440Hz -> E4 330Hz).
+      [
+        { offset: 0, freq: 440, duration: 0.15 },
+        { offset: 0.16, freq: 330, duration: 0.15 },
+        { offset: 0.32, freq: 440, duration: 0.15 },
+        { offset: 0.48, freq: 330, duration: 0.25 },
+      ].forEach(({ offset, freq, duration }) => {
+        tone(audio, start + offset, freq, duration, 0.22, 'triangle');
       });
       break;
     case 'card':

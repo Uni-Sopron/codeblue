@@ -26,7 +26,10 @@ const CARD_CATEGORIES: { id: CardCategory; label: string }[] = [
 ];
 const SOUND_PREVIEWS: { id: SoundEffect; label: string }[] = [
   { id: 'dice', label: 'Kockadobás' },
-  { id: 'money', label: 'Pénzmozgás' },
+  { id: 'money', label: 'Bevétel' },
+  { id: 'penalty', label: 'Kiadás / Bírság' },
+  { id: 'build', label: 'Részlegépítés' },
+  { id: 'siren', label: 'Mentősziréna' },
   { id: 'card', label: 'Kártyahúzás' },
   { id: 'victory', label: 'Győzelem' },
 ];

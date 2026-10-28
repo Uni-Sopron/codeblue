@@ -100,7 +100,7 @@ function mockBrowser(options: { muted?: boolean; blockedStorage?: boolean; block
   };
 }
 
-test('one lazy context, trusted interaction unlock, and four distinct synthesized effects', async () => {
+test('one lazy context, trusted interaction unlock, and seven distinct synthesized effects', async () => {
   const browser = mockBrowser();
   const audio = await loadAudio();
   const cleanup = audio.registerAudioUnlock();
@@ -121,6 +121,20 @@ test('one lazy context, trusted interaction unlock, and four distinct synthesize
   assert.equal(browser.stats.noiseBursts, 9);
   await audio.playSound('victory');
   assert.equal(browser.stats.oscillators, 22);
+
+  // New procedural effects
+  await audio.playSound('build');
+  assert.equal(browser.stats.noiseBursts, 10);
+  assert.equal(browser.stats.oscillators, 27);
+
+  await audio.playSound('siren');
+  assert.equal(browser.stats.noiseBursts, 10);
+  assert.equal(browser.stats.oscillators, 31);
+
+  await audio.playSound('penalty');
+  assert.equal(browser.stats.noiseBursts, 11);
+  assert.equal(browser.stats.oscillators, 34);
+
   browser.fire('keydown');
   assert.equal(browser.stats.contexts, 1);
   cleanup();
