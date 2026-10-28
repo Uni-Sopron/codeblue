@@ -524,6 +524,8 @@
 }
 
 .clinic-modal-content {
+  box-sizing: border-box;
+  min-width: 0;
   background: #0f172a;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 18px;
@@ -563,6 +565,13 @@
 .clinic-modal-close:hover {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 640px) {
+  .clinic-modal-backdrop { padding: 10px; }
+  .clinic-modal-content { padding: 10px; max-height: calc(100dvh - 20px); }
+  .clinic-header-info { min-width: 0; }
+  .clinic-header-info h2 { font-size: 1.1rem; overflow-wrap: anywhere; }
 }
 
 /* Footer */

@@ -1,21 +1,10 @@
-import React from 'react';
-import type { Player, ClinicElementId, ClinicElement } from '../../types/game.ts';
+import { useId, useRef, useState } from 'react';
+import { Building2, CheckCircle2, LockKeyhole, ShoppingBag } from 'lucide-react';
+import type { Player, ClinicElementId } from '../../types/game.ts';
 import { CLINIC_ELEMENTS, getClinicElementById } from '../../data/clinicElements.ts';
-import {
-  DoorOpen,
-  FlaskConical,
-  Activity,
-  Scissors,
-  BedDouble,
-  HeartPulse,
-  Dumbbell,
-  Plane,
-  CheckCircle2,
-  Lock,
-  Building2,
-  AlertCircle,
-  ShoppingBag,
-} from 'lucide-react';
+import { ClinicBlueprint } from './ClinicBlueprint.tsx';
+import { CLINIC_VISUALS } from './clinicVisuals.ts';
+import type { ClinicRoomState } from './clinicVisuals.ts';
 import './ClinicDashboard.css';
 
 interface ClinicDashboardProps {
@@ -26,166 +15,138 @@ interface ClinicDashboardProps {
   isCurrentTurnActive?: boolean;
 }
 
-const ELEMENT_ICON_MAP: Record<ClinicElementId, React.ComponentType<{ className?: string }>> = {
-  reception: DoorOpen,
-  lab: FlaskConical,
-  diagnostics: Activity,
-  surgery: Scissors,
-  vip_ward: BedDouble,
-  icu: HeartPulse,
-  rehab: Dumbbell,
-  helipad: Plane,
+const STATE_LABELS: Record<ClinicRoomState, string> = {
+  built: 'Felépült',
+  available: 'Megvásárolható',
+  locked: 'Zárolt',
 };
 
-export const ClinicDashboard: React.FC<ClinicDashboardProps> = ({
+export function ClinicDashboard({
   player,
   onBuyElement,
   canBuyCheck,
   hasBuiltThisTurn = false,
   isCurrentTurnActive = true,
-}) => {
-  if (!player) {
-    return null;
-  }
+}: ClinicDashboardProps) {
+  const dashboardId = useId();
+  const [selectedId, setSelectedId] = useState<ClinicElementId>('reception');
+  const cardRefs = useRef<Partial<Record<ClinicElementId, HTMLElement | null>>>({});
 
-  const builtCount = player.builtElements.length;
-  const progressPercent = Math.round((builtCount / CLINIC_ELEMENTS.length) * 100);
+  if (!player) return null;
+
+  const rooms = CLINIC_ELEMENTS.map((element) => {
+    const isBuilt = player.builtElements.includes(element.id);
+    const prerequisite = element.prerequisiteId ? getClinicElementById(element.prerequisiteId) : undefined;
+    const prerequisiteMissing = Boolean(prerequisite && !player.builtElements.includes(prerequisite.id));
+    const check = canBuyCheck?.(element.id) ?? {
+      canBuy: !isBuilt && !prerequisiteMissing && player.cash >= element.cost,
+      finalCost: element.cost,
+      reason: player.cash < element.cost ? 'Nincs elegendő fedezet.' : undefined,
+    };
+    const finalCost = !check.canBuy && check.finalCost === 0 ? element.cost : check.finalCost;
+    const status: ClinicRoomState = isBuilt
+      ? 'built'
+      : check.canBuy && !prerequisiteMissing && !hasBuiltThisTurn && isCurrentTurnActive
+        ? 'available'
+        : 'locked';
+    const reason = isBuilt ? undefined
+      : prerequisiteMissing ? `Előfeltétel: ${prerequisite?.name}`
+        : hasBuiltThisTurn ? 'Ebben a körben már építettél.'
+          : !isCurrentTurnActive ? 'Építkezéskor vásárolható.'
+            : check.reason;
+
+    return { element, status, reason, finalCost, ...CLINIC_VISUALS[element.id] };
+  });
+  const builtCount = rooms.filter((room) => room.status === 'built').length;
+  const progressPercent = Math.round(builtCount / CLINIC_ELEMENTS.length * 100);
+
+  const selectRoom = (id: ClinicElementId) => {
+    setSelectedId(id);
+    const card = cardRefs.current[id];
+    card?.focus({ preventScroll: true });
+    card?.scrollIntoView({
+      block: 'nearest',
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    });
+  };
 
   return (
-    <div className="clinic-dashboard">
-      <div className="clinic-header">
+    <section className="clinic-dashboard" aria-labelledby={`${dashboardId}-title`}>
+      <header className="clinic-header">
         <div className="clinic-title-group">
-          <Building2 className="clinic-title-icon" />
+          <span className="clinic-title-icon"><Building2 aria-hidden="true" /></span>
           <div>
-            <h2 className="clinic-title">{player.name} Magánklinikája</h2>
-            <p className="clinic-subtitle">
-              Tervrajz és Részlegfejlesztés • {player.avatarTitle}
-            </p>
+            <h2 id={`${dashboardId}-title`} className="clinic-title">{player.name} magánklinikája</h2>
+            <p className="clinic-subtitle">Részlegfejlesztés</p>
           </div>
         </div>
-
         <div className="clinic-progress-wrapper">
-          <div className="clinic-progress-bar-container" title={`${builtCount} / ${CLINIC_ELEMENTS.length} részleg felépült`}>
-            <div
-              className="clinic-progress-bar-fill"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <span className="clinic-progress-badge">
-            {builtCount} / {CLINIC_ELEMENTS.length} Részleg ({progressPercent}%)
-          </span>
+          <span className="clinic-progress-count"><strong>{builtCount}</strong> / 8 részleg</span>
+          <progress className="clinic-progress" value={builtCount} max={CLINIC_ELEMENTS.length} aria-label={`Klinika készültsége: ${progressPercent}%`} />
         </div>
-      </div>
+      </header>
+
+      <ClinicBlueprint rooms={rooms} selectedId={selectedId} onSelectRoom={selectRoom} />
 
       <div className="clinic-grid">
-        {CLINIC_ELEMENTS.map((element: ClinicElement) => {
-          const isBuilt = player.builtElements.includes(element.id);
-          const IconComponent = ELEMENT_ICON_MAP[element.id] || Building2;
-          const prereqElement = element.prerequisiteId ? getClinicElementById(element.prerequisiteId) : null;
-          const prereqMissing = element.prerequisiteId && !player.builtElements.includes(element.prerequisiteId);
-
-          // Vásárlási ellenőrzés
-          const check = canBuyCheck
-            ? canBuyCheck(element.id)
-            : {
-                canBuy: !isBuilt && !prereqMissing && !hasBuiltThisTurn && player.cash >= element.cost,
-                reason: isBuilt
-                  ? 'Már felépült'
-                  : prereqMissing
-                  ? `Előfeltétel: ${prereqElement?.name}`
-                  : hasBuiltThisTurn
-                  ? 'Ebben a körben már építettél'
-                  : player.cash < element.cost
-                  ? 'Nincs elég pénz'
-                  : undefined,
-                finalCost: element.cost,
-              };
-
-          // 3 állapot meghatározása
-          let cardStatusClass = 'status-locked';
-          if (isBuilt) {
-            cardStatusClass = 'status-built';
-          } else if (check.canBuy && isCurrentTurnActive) {
-            cardStatusClass = 'status-available';
-          }
-
-          const hasDiscount = check.finalCost < element.cost;
+        {rooms.map(({ element, image, status, reason, finalCost }) => {
+          const isBuilt = status === 'built';
+          const hasDiscount = finalCost < element.cost;
+          const titleId = `${dashboardId}-${element.id}-title`;
+          const reasonId = `${dashboardId}-${element.id}-reason`;
+          const StateIcon = isBuilt ? CheckCircle2 : status === 'available' ? ShoppingBag : LockKeyhole;
 
           return (
-            <div key={element.id} className={`clinic-card ${cardStatusClass}`}>
-              <div className="card-top">
-                <div className="card-icon-group">
-                  <div className="card-icon-wrapper">
-                    <IconComponent className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <span className="card-order">#{element.order}. Fázis</span>
-                    <h3 className="card-name">{element.name}</h3>
-                  </div>
-                </div>
-
-                {isBuilt ? (
-                  <span className="card-badge built">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Felépült
-                  </span>
-                ) : check.canBuy && isCurrentTurnActive ? (
-                  <span className="card-badge available">
-                    <ShoppingBag className="w-3.5 h-3.5" /> Megvásárolható
-                  </span>
-                ) : (
-                  <span className="card-badge locked">
-                    <Lock className="w-3.5 h-3.5" /> Zárolt
-                  </span>
-                )}
+            <article
+              key={element.id}
+              ref={(node) => { cardRefs.current[element.id] = node; }}
+              className={`clinic-room clinic-room--${status}${selectedId === element.id ? ' clinic-room--selected' : ''}`}
+              tabIndex={-1}
+              aria-labelledby={titleId}
+            >
+              <div className="clinic-room-visual">
+                <img className="clinic-room-image" src={image} alt="" loading="lazy" width="768" height="512" />
+                <span className="clinic-room-number">{String(element.order).padStart(2, '0')}</span>
+                <span className="clinic-room-status"><StateIcon aria-hidden="true" />{STATE_LABELS[status]}</span>
+                {status === 'locked' && <LockKeyhole className="clinic-room-lock" aria-hidden="true" />}
               </div>
 
-              <p className="card-description">{element.description}</p>
+              <div className="clinic-room-content">
+                <h3 id={titleId} className="clinic-room-name">{element.name}</h3>
+                <p className="clinic-room-description">{element.description}</p>
+                {reason && <p id={reasonId} className="clinic-room-reason"><LockKeyhole aria-hidden="true" />{reason}</p>}
 
-              {prereqMissing && !isBuilt && (
-                <div className="card-prerequisite">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>Előfeltétel: <strong>{prereqElement?.name || element.prerequisiteId}</strong></span>
-                </div>
-              )}
-
-              <div className="card-bottom">
-                <div className="price-tag">
-                  <span className="price-label">Beruházási ár</span>
-                  <div className="flex items-baseline">
-                    <span className={`price-value ${hasDiscount ? 'price-discounted' : ''}`}>
-                      {check.finalCost.toLocaleString()} KK
-                    </span>
-                    {hasDiscount && (
-                      <span className="price-original">
-                        {element.cost.toLocaleString()} KK
-                      </span>
-                    )}
+                <div className="clinic-room-footer">
+                  <div className="clinic-room-price">
+                    <span>{isBuilt ? 'Beruházási érték' : 'Beruházási ár'}</span>
+                    <strong className={hasDiscount && !isBuilt ? 'clinic-room-price--discount' : undefined}>
+                      {(isBuilt ? element.cost : finalCost).toLocaleString('hu-HU')} KK
+                    </strong>
+                    {hasDiscount && !isBuilt && <del>{element.cost.toLocaleString('hu-HU')} KK</del>}
                   </div>
-                </div>
 
-                {isBuilt ? (
-                  <div className="built-indicator">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                    <span>Üzemel</span>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn-buy"
-                    disabled={!check.canBuy || !isCurrentTurnActive || hasBuiltThisTurn}
-                    onClick={() => onBuyElement?.(element.id)}
-                    title={check.reason || 'Klinikai részleg megvásárlása'}
-                  >
-                    <ShoppingBag className="w-4 h-4" />
-                    <span>Vásárlás</span>
-                  </button>
-                )}
+                  {isBuilt ? (
+                    <span className="clinic-room-operating"><CheckCircle2 aria-hidden="true" />Üzemel</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="clinic-room-buy"
+                      disabled={status !== 'available' || !onBuyElement}
+                      onClick={() => onBuyElement?.(element.id)}
+                      aria-label={`${element.name} megvásárlása, ${finalCost.toLocaleString('hu-HU')} KK`}
+                      aria-describedby={reason ? reasonId : undefined}
+                    >
+                      <ShoppingBag aria-hidden="true" />Vásárlás
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
+            </article>
           );
         })}
       </div>
-    </div>
+    </section>
   );
-};
+}
+
 export default ClinicDashboard;
