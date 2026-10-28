@@ -563,6 +563,10 @@ export function App() {
               const last = controls[controls.length - 1];
               if (e.shiftKey && (document.activeElement === first || document.activeElement === clinicModalRef.current)) { e.preventDefault(); last.focus(); }
               else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+              else if (!e.shiftKey && document.activeElement && !Array.from(controls).some((control) => document.activeElement!.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+                e.preventDefault();
+                first.focus();
+              }
             }}>
             <div className="clinic-modal-header">
               <div className="clinic-header-info">
