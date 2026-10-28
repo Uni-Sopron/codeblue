@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { addBotToRoom, removeBotFromRoom, canDriveActivePlayer, hasValidRoster, transferHostToHuman } from './botPlayers.js';
 
 const filename = fileURLToPath(import.meta.url);
 const publicPath = path.join(path.dirname(filename), 'public');
@@ -37,7 +38,7 @@ export function createInitialGameState(players) {
       ...(p.isAI ? { isAI: true } : {}),
     })),
     activePlayerIndex: 0, turnNumber: 1, phase: 'roll', diceResult: null, isRolling: false,
-    drawnCard: null, cardDeck, discardDeck: [], winner: null, logs: [], roundPassBonusGranted: false,
+    drawnCard: null, cardDeck, discardDeck: [], winner: null, logs: [], roundPassBonusGranted: false, builtThisTurn: false,
   };
 }
 
@@ -78,11 +79,7 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
     messageCounts.set(socketId, entry);
     return entry.count > 40;
   };
-  const transferHost = (room) => {
-    const currentHost = room.players.find((p) => p.isHost && p.connected && !p.isAI);
-    const host = currentHost || room.players.find((p) => p.connected && !p.isAI);
-    if (host) { room.hostSocketId = host.socketId; room.players.forEach((p) => { p.isHost = p.id === host.id; }); }
-  };
+  const transferHost = transferHostToHuman;
   const scheduleWatchdog = (room) => {
     clearWatchdog(room);
     const state = room.gameState;
@@ -99,7 +96,7 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
       if (next === -1) return;
       const previousIndex = room.gameState.activePlayerIndex;
       room.gameState = { ...room.gameState, activePlayerIndex: next, phase: 'roll', diceResult: null, isRolling: false, drawnCard: null,
-        roundPassBonusGranted: false, turnNumber: room.gameState.turnNumber + (next <= previousIndex ? 1 : 0) };
+        roundPassBonusGranted: false, builtThisTurn: false, turnNumber: room.gameState.turnNumber + (next <= previousIndex ? 1 : 0) };
       io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
       io.to(room.code).emit('turn:auto_passed', { newActivePlayerIndex: next, gameState: room.gameState });
     }, disconnectTimeoutMs);
@@ -212,6 +209,20 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
       publishDirectory();
     });
 
+    const manageBot = (data, callback, remove) => {
+      if (!checkRate(callback)) return;
+      const room = memberRoom(data?.roomCode);
+      if (!room || room.hostSocketId !== socket.id) return fail(callback, 'Csak a szobagazda kezelheti a botokat.', 'HOST_REQUIRED');
+      const result = remove ? removeBotFromRoom(room, socket.id, data?.playerId) : addBotToRoom(room, socket.id);
+      if (!result.success) return fail(callback, result.error, room.gameStarted ? 'GAME_STARTED' : room.players.length >= 4 ? 'ROOM_FULL' : 'BOT_ERROR');
+      room.lastActive = now();
+      if (typeof callback === 'function') callback({ success: true, room: roomView(room) });
+      publishRoom(room);
+      publishDirectory();
+    };
+    socket.on('room:add_bot', (data = {}, callback) => manageBot(data, callback, false));
+    socket.on('room:remove_bot', (data = {}, callback) => manageBot(data, callback, true));
+
     socket.on('room:start', (data = {}, callback) => {
       if (!checkRate(callback)) return;
       const room = memberRoom(data?.roomCode);
@@ -226,12 +237,7 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
       publishDirectory();
     });
 
-    const acceptsState = (room, state) => {
-      if (!room?.gameStarted || !state || !Array.isArray(state.players) || state.players.length !== room.players.length) return false;
-      if (!Number.isInteger(state.activePlayerIndex) || state.activePlayerIndex < 0 || state.activePlayerIndex >= state.players.length) return false;
-      if (!state.players.every((p, i) => p?.id === room.gameState.players[i]?.id)) return false;
-      return true;
-    };
+    const acceptsState = (room, state) => canDriveActivePlayer(room, socket.id) && hasValidRoster(room, state);
     socket.on('game:action', (data = {}) => {
       if (!checkRate()) return;
       const room = memberRoom(data?.roomCode);
@@ -265,12 +271,16 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
       socket.join(room.code);
       currentRoomCode = room.code;
       room.lastActive = now();
+      const previousHost = room.hostSocketId;
       transferHost(room);
       if (room.gameState) room.gameState = { ...room.gameState, players: room.gameState.players.map((p) => p.id === player.id ? { ...p, connected: true } : p) };
       scheduleWatchdog(room);
       const token = issueToken(room, player);
       if (typeof callback === 'function') callback({ success: true, room: roomView(room), player: roomView(room).players.find((p) => p.id === player.id), gameState: room.gameState, reconnectToken: token });
-      if (room.gameState) socket.emit('game:sync_broadcast', { gameState: room.gameState });
+      if (room.gameState) {
+        if (previousHost !== room.hostSocketId) io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
+        else socket.emit('game:sync_broadcast', { gameState: room.gameState });
+      }
       io.to(room.code).emit('player:reconnected', { playerId: player.id, playerName: player.name });
       publishRoom(room);
       publishDirectory();
@@ -288,10 +298,11 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
         return;
       }
       room.rematchVotes[player.id] = true;
+      for (const bot of room.players.filter((p) => p.isAI)) room.rematchVotes[bot.id] = true;
       room.lastActive = now();
       io.to(room.code).emit('room:rematch_update', { votes: { ...room.rematchVotes }, requestedBy: player.name, requestedById: player.id, isHost: player.isHost, ready: true });
-      const connected = room.players.filter((p) => p.connected);
-      if (connected.length >= 2 && connected.every((p) => room.rematchVotes[p.id] === true)) {
+      const connected = room.players.filter((p) => p.connected && !p.isAI);
+      if (room.players.length >= 2 && connected.length >= 1 && connected.every((p) => room.rematchVotes[p.id] === true)) {
         room.rematchVotes = {};
         clearWatchdog(room);
         room.gameState = createInitialGameState(room.players);
@@ -313,10 +324,11 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
         room.players.splice(index, 1);
         secrets.get(room.code).tokens.delete(player.id);
         transferHost(room);
-        if (!room.players.length) deleteRoom(room.code);
+        if (!room.players.some((p) => !p.isAI)) deleteRoom(room.code);
         else publishRoom(room);
       } else {
         player.connected = false;
+        const previousHost = room.hostSocketId;
         if (explicit) secrets.get(room.code).tokens.delete(player.id);
         transferHost(room);
         room.gameState = { ...room.gameState, players: room.gameState.players.map((p) => ({ ...p, connected: room.players.find((rp) => rp.id === p.id)?.connected ?? false, isHost: room.players.find((rp) => rp.id === p.id)?.isHost ?? false })) };
@@ -324,6 +336,7 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
         io.to(room.code).emit('player:disconnected', { playerId: player.id, playerName: player.name, ...(explicit ? { reason: 'left' } : {}), isActivePlayer: active, ...(active ? { timeoutSeconds: Math.ceil(disconnectTimeoutMs / 1000) } : {}) });
         if (explicit) io.to(room.code).emit('room:player_left', { playerId: player.id, playerName: player.name });
         publishRoom(room);
+        if (previousHost !== room.hostSocketId) io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
         scheduleWatchdog(room);
       }
       publishDirectory();

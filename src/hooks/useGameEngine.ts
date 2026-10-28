@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type {
   GameState,
   Player,
@@ -90,6 +90,12 @@ export function useGameEngine() {
   const [hasRolledThisTurn, setHasRolledThisTurn] = useState<boolean>(false);
   const hasBuiltThisTurn = Boolean(gameState.builtThisTurn);
   const [extraRollAvailable, setExtraRollAvailable] = useState<boolean>(false);
+  const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelPendingRoll = useCallback(() => {
+    if (rollTimer.current !== null) clearTimeout(rollTimer.current);
+    rollTimer.current = null;
+  }, []);
+  useEffect(() => cancelPendingRoll, [cancelPendingRoll]);
 
   // Aktuális soron lévő játékos
   const activePlayer = useMemo<Player | null>(() => {
@@ -163,6 +169,7 @@ export function useGameEngine() {
       if (configs.length < GAME_CONSTANTS.MIN_PLAYERS || configs.length > GAME_CONSTANTS.MAX_PLAYERS) {
         throw new Error(`A játékosok száma ${GAME_CONSTANTS.MIN_PLAYERS} és ${GAME_CONSTANTS.MAX_PLAYERS} között kell legyen!`);
       }
+      cancelPendingRoll();
 
       const initialPlayers: Player[] = configs.map((cfg) => {
         const avatarInfo = AVATARS.find((a) => a.id === cfg.avatar) ?? AVATARS[0];
@@ -211,7 +218,7 @@ export function useGameEngine() {
       setHasRolledThisTurn(false);
       setExtraRollAvailable(false);
     },
-    [],
+    [cancelPendingRoll],
   );
 
   /**
@@ -221,6 +228,7 @@ export function useGameEngine() {
    * - START mező áthaladáskor +300 000 KK
    */
   const rollDice = useCallback(() => {
+    if (rollTimer.current !== null) return;
     if (!activePlayer) return;
     if (gameState.phase !== 'roll') return;
     if (gameState.isRolling || gameState.winner) return;
@@ -232,7 +240,8 @@ export function useGameEngine() {
     setGameState((prev) => ({ ...prev, isRolling: true }));
 
     // Rövid vizuális időzítés után léptetés
-    setTimeout(() => {
+    rollTimer.current = setTimeout(() => {
+      rollTimer.current = null;
       setGameState((prev) => {
         const currentP = prev.players[prev.activePlayerIndex];
         if (!currentP || prev.phase !== 'roll' || !prev.isRolling) return prev;
@@ -1036,15 +1045,17 @@ export function useGameEngine() {
    * 9. Játék újraindítása
    */
   const resetGame = useCallback(() => {
+    cancelPendingRoll();
     setGameState(createInitialState());
     setHasRolledThisTurn(false);
     setExtraRollAvailable(false);
-  }, []);
+  }, [cancelPendingRoll]);
 
   /**
    * 9.1 Meccs újraindítása helyben a táblán (orvosok megtartásával, főmenübe lépés nélkül)
    */
   const restartCurrentMatch = useCallback(() => {
+    cancelPendingRoll();
     setGameState((prev) => {
       const freshPlayers = prev.players.map((p) => ({
         ...p,
@@ -1083,7 +1094,7 @@ export function useGameEngine() {
     });
     setHasRolledThisTurn(false);
     setExtraRollAvailable(false);
-  }, []);
+  }, [cancelPendingRoll]);
 
   // Explicit debug API keeps the panel on the same state as the real game.
   const dispatchDevAction = useCallback((action: DevAction) => {
@@ -1107,6 +1118,7 @@ export function useGameEngine() {
   }, [dispatchDevAction]);
 
   const setFullGameState = useCallback((newStateOrUpdater: GameState | ((prev: GameState) => GameState)) => {
+    if (typeof newStateOrUpdater !== 'function' && !newStateOrUpdater.isRolling) cancelPendingRoll();
     setGameState((prev) => {
       const resolved = typeof newStateOrUpdater === 'function' ? newStateOrUpdater(prev) : newStateOrUpdater;
       const normalizedState: GameState = {
@@ -1123,7 +1135,7 @@ export function useGameEngine() {
       }
       return normalizedState;
     });
-  }, []);
+  }, [cancelPendingRoll]);
 
   return {
     gameState,
