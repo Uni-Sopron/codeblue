@@ -106,3 +106,47 @@ test('Game state sync invariants: active player index and players list boundary 
   assert.equal(activeIndex, 0);
   assert.equal(players[activeIndex].id, 'p1');
 });
+
+test('Rematch ready-check logic requires all active connected players to vote ready', () => {
+  const room = {
+    players: [
+      { id: 'p1', name: 'Dr. Kovács', connected: true },
+      { id: 'p2', name: 'Dr. Nagy', connected: true },
+      { id: 'p3', name: 'Dr. Kiss', connected: false } // disconnected
+    ],
+    rematchVotes: {
+      p1: true,
+      p2: false
+    } as Record<string, boolean>
+  };
+
+  const connectedPlayers = room.players.filter(p => p.connected !== false);
+  const isAllReadyBefore = connectedPlayers.every(p => room.rematchVotes[p.id] === true);
+  assert.equal(isAllReadyBefore, false);
+
+  // p2 votes ready
+  room.rematchVotes['p2'] = true;
+  const isAllReadyAfter = connectedPlayers.every(p => room.rematchVotes[p.id] === true);
+  assert.equal(isAllReadyAfter, true);
+});
+
+test('Disconnect auto-pass: next connected player is selected properly', () => {
+  const players = [
+    { id: 'p1', name: 'Dr. Alpha', connected: false },
+    { id: 'p2', name: 'Dr. Beta', connected: false },
+    { id: 'p3', name: 'Dr. Gamma', connected: true }
+  ];
+
+  let currentActiveIndex = 0; // Alpha is disconnected
+  let nextActiveIndex = (currentActiveIndex + 1) % players.length;
+  let attempts = 0;
+
+  while (!players[nextActiveIndex].connected && attempts < players.length) {
+    nextActiveIndex = (nextActiveIndex + 1) % players.length;
+    attempts++;
+  }
+
+  assert.equal(nextActiveIndex, 2);
+  assert.equal(players[nextActiveIndex].id, 'p3');
+});
+

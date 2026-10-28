@@ -35,6 +35,8 @@ export interface MultiplayerRoom {
   gameStarted: boolean;
   gameState: GameState | null;
   createdAt: string;
+  rematchVotes?: Record<string, boolean>;
+  disconnectTimeout?: { playerId: string; remainingSeconds: number } | null;
 }
 
 class MultiplayerSocketService {
@@ -163,6 +165,18 @@ class MultiplayerSocketService {
         }
       );
     });
+  }
+
+  public voteRematch(roomCode: string, ready: boolean): void {
+    if (!this.socket) return;
+    this.socket.emit('room:rematch_vote', { roomCode, ready });
+  }
+
+  public leaveRoom(roomCode: string): void {
+    if (this.socket) {
+      this.socket.emit('room:leave', { roomCode });
+    }
+    this.disconnect();
   }
 
   public disconnect(): void {

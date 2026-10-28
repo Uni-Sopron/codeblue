@@ -48,6 +48,8 @@ export interface Player {
   skipTurns: number;      // Körből kimaradás büntetés számláló
   activeBuffs: ActiveBuff[];
   isAI?: boolean;
+  connected?: boolean;
+  isHost?: boolean;
 }
 
 // ==========================================

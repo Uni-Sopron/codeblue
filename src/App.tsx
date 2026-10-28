@@ -15,7 +15,7 @@ import { BOARD_TILES } from './data/tiles.ts';
 import { AVATARS } from './data/avatars.ts';
 import { useGameEngine } from './hooks/useGameEngine.ts';
 import { useGameAudio } from './hooks/useGameAudio.ts';
-import type { PlayerId, GamePhase, GameState } from './types/game.ts';
+import type { PlayerId, GamePhase, GameState, Player } from './types/game.ts';
 import {
   multiplayerService,
   type RemotePlayer,
@@ -30,6 +30,7 @@ import { ClinicDashboard } from './components/Clinic/ClinicDashboard.tsx';
 import { CardModal } from './components/Modals/CardModal.tsx';
 import { BankModal } from './components/Modals/BankModal.tsx';
 import { GameOverModal } from './components/Modals/GameOverModal.tsx';
+import { ConfirmExitModal } from './components/Modals/ConfirmExitModal.tsx';
 import { DevPanel } from './components/DevTools/DevPanel.tsx';
 import './App.css';
 
@@ -54,11 +55,15 @@ export function App() {
   const [isClinicOpen, setIsClinicOpen] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
+  const [isConfirmExitOpen, setIsConfirmExitOpen] = useState(false);
 
   // Multiplayer and game mode state
   const [gameMode, setGameMode] = useState<'local' | 'online' | null>(null);
   const [onlineRoom, setOnlineRoom] = useState<MultiplayerRoom | null>(null);
   const [myRemotePlayer, setMyRemotePlayer] = useState<RemotePlayer | null>(null);
+  const [rematchVotes, setRematchVotes] = useState<Record<string, boolean>>({});
+  const [turnTimeoutRemaining, setTurnTimeoutRemaining] = useState<number | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ id: number; text: string; type: 'info' | 'warning' | 'success' } | null>(null);
   const isRemoteUpdateRef = useRef(false);
 
   // Setup state (for local hotseat)
@@ -155,12 +160,125 @@ export function App() {
       }
     };
 
+    const handlePlayerDisconnected = ({
+      playerId,
+      playerName,
+      timeoutSeconds,
+    }: {
+      playerId: string;
+      playerName: string;
+      timeoutSeconds?: number;
+    }) => {
+      isRemoteUpdateRef.current = true;
+      engine.setFullGameState((prev: GameState) => ({
+        ...prev,
+        players: prev.players.map((p: Player) =>
+          p.id === playerId ? { ...p, connected: false } : p
+        ),
+      }));
+
+      if (timeoutSeconds) {
+        setTurnTimeoutRemaining(timeoutSeconds);
+      }
+
+      setToastMessage({
+        id: Date.now(),
+        text: `⚠️ ${playerName} kapcsolata megszakadt.${timeoutSeconds ? ` Körátadás ${timeoutSeconds} mp múlva.` : ''}`,
+        type: 'warning',
+      });
+    };
+
+    const handlePlayerReconnected = ({
+      playerId,
+      playerName,
+    }: {
+      playerId: string;
+      playerName: string;
+    }) => {
+      isRemoteUpdateRef.current = true;
+      engine.setFullGameState((prev: GameState) => ({
+        ...prev,
+        players: prev.players.map((p: Player) =>
+          p.id === playerId ? { ...p, connected: true } : p
+        ),
+      }));
+
+      setTurnTimeoutRemaining(null);
+
+      setToastMessage({
+        id: Date.now(),
+        text: `✅ ${playerName} visszacsatlakozott!`,
+        type: 'success',
+      });
+    };
+
+    const handleRematchUpdate = ({ votes }: { votes: Record<string, boolean> }) => {
+      setRematchVotes(votes || {});
+    };
+
+    const handleGameReset = ({
+      room: resetRoom,
+      gameState: resetGameState,
+    }: {
+      room: MultiplayerRoom;
+      gameState: GameState;
+    }) => {
+      setRematchVotes({});
+      setTurnTimeoutRemaining(null);
+      setOnlineRoom(resetRoom);
+      isRemoteUpdateRef.current = true;
+      engine.setFullGameState(resetGameState);
+      setToastMessage({
+        id: Date.now(),
+        text: '🚀 A visszavágó elindult! Új játék kezdődött.',
+        type: 'success',
+      });
+    };
+
+    const handleTurnAutoPassed = ({
+      gameState: updatedState,
+    }: {
+      newActivePlayerIndex: number;
+      gameState: GameState;
+    }) => {
+      setTurnTimeoutRemaining(null);
+      if (updatedState) {
+        isRemoteUpdateRef.current = true;
+        engine.setFullGameState(updatedState);
+      }
+      setToastMessage({
+        id: Date.now(),
+        text: '⏱️ Az inaktív játékos köre átadásra került.',
+        type: 'info',
+      });
+    };
+
+    const handlePlayerLeft = ({ playerName }: { playerName: string }) => {
+      setToastMessage({
+        id: Date.now(),
+        text: `ℹ️ ${playerName} elhagyta a szobát.`,
+        type: 'info',
+      });
+    };
+
     socket.on('game:started', handleGameStarted);
     socket.on('game:sync_broadcast', handleRemoteSync);
+    socket.on('player:disconnected', handlePlayerDisconnected);
+    socket.on('player:reconnected', handlePlayerReconnected);
+    socket.on('room:rematch_update', handleRematchUpdate);
+    socket.on('room:game_reset', handleGameReset);
+    socket.on('turn:auto_passed', handleTurnAutoPassed);
+    socket.on('room:player_left', handlePlayerLeft);
 
     return () => {
       socket.off('game:started', handleGameStarted);
       socket.off('game:sync_broadcast', handleRemoteSync);
+      socket.off('player:disconnected', handlePlayerDisconnected);
+      socket.off('player:reconnected', handlePlayerReconnected);
+      socket.off('room:rematch_update', handleRematchUpdate);
+      socket.off('room:game_reset', handleGameReset);
+      socket.off('turn:auto_passed', handleTurnAutoPassed);
+      socket.off('room:player_left', handlePlayerLeft);
     };
   }, [engine]);
 
@@ -174,6 +292,24 @@ export function App() {
       multiplayerService.syncState(onlineRoom.code, gameState);
     }
   }, [gameState, gameMode, onlineRoom]);
+
+  // Turn timeout countdown timer
+  useEffect(() => {
+    if (turnTimeoutRemaining === null || turnTimeoutRemaining <= 0) return;
+    const timer = setInterval(() => {
+      setTurnTimeoutRemaining((prev) => (prev && prev > 1 ? prev - 1 : null));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [turnTimeoutRemaining]);
+
+  // Toast auto-dismiss after 4.5 seconds
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = setTimeout(() => {
+      setToastMessage(null);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [toastMessage]);
 
   // Handle dice roll
   const handleRollDice = useCallback(() => {
@@ -195,6 +331,9 @@ export function App() {
 
   // Status message for the center board feed
   const statusMessage = useMemo(() => {
+    if (turnTimeoutRemaining !== null && turnTimeoutRemaining > 0) {
+      return `⚠️ Játékos kapcsolata megszakadt! Automatikus körátadás ${turnTimeoutRemaining} mp múlva...`;
+    }
     if (gameMode === 'online' && !isMyTurn && activePlayer) {
       return `⏳ Várakozás: ${activePlayer.name} orvos köre van folyamatban...`;
     }
@@ -214,7 +353,7 @@ export function App() {
       return 'Eseménykártya felhúzva! Olvasd el a lapot a folytatáshoz.';
     }
     return undefined;
-  }, [gameMode, isMyTurn, gameState.phase, activePlayer, currentTile]);
+  }, [turnTimeoutRemaining, gameMode, isMyTurn, gameState.phase, activePlayer, currentTile]);
 
   return (
     <div className="app-container">
@@ -296,16 +435,8 @@ export function App() {
             <button
               type="button"
               className="header-btn btn-reset"
-              onClick={() => {
-                engine.resetGame();
-                if (gameMode === 'online') {
-                  multiplayerService.disconnect();
-                  setOnlineRoom(null);
-                  setMyRemotePlayer(null);
-                }
-                setGameMode(null);
-              }}
-              title="Játék újraindítása"
+              onClick={() => setIsConfirmExitOpen(true)}
+              title={gameMode === 'online' ? 'Szoba és játék kezelése' : 'Játék újraindítása'}
             >
               <RotateCcw size={16} />
             </button>
@@ -565,6 +696,51 @@ export function App() {
         winner={gameState.winner}
         turnNumber={gameState.turnNumber}
         onNewGame={engine.resetGame}
+        gameMode={gameMode}
+        players={gameState.players}
+        myPlayerId={myRemotePlayer?.id}
+        rematchVotes={rematchVotes}
+        onVoteRematch={(ready) => {
+          if (gameMode === 'online' && onlineRoom) {
+            multiplayerService.voteRematch(onlineRoom.code, ready);
+          }
+        }}
+        onLeaveRoom={() => {
+          if (gameMode === 'online' && onlineRoom) {
+            multiplayerService.leaveRoom(onlineRoom.code);
+            setOnlineRoom(null);
+            setMyRemotePlayer(null);
+          }
+          engine.resetGame();
+          setGameMode(null);
+        }}
+      />
+
+      {/* 4.5 Confirmation Exit / Rematch Modal */}
+      <ConfirmExitModal
+        isOpen={isConfirmExitOpen}
+        onClose={() => setIsConfirmExitOpen(false)}
+        gameMode={gameMode}
+        isHost={!!myRemotePlayer?.isHost}
+        onConfirmExit={() => {
+          if (gameMode === 'online' && onlineRoom) {
+            multiplayerService.leaveRoom(onlineRoom.code);
+            setOnlineRoom(null);
+            setMyRemotePlayer(null);
+          }
+          engine.resetGame();
+          setGameMode(null);
+        }}
+        onRequestRematch={() => {
+          if (gameMode === 'online' && onlineRoom) {
+            multiplayerService.voteRematch(onlineRoom.code, true);
+            setToastMessage({
+              id: Date.now(),
+              text: 'Visszavágót kértél! Várakozás a többi játékos megerősítésére...',
+              type: 'info',
+            });
+          }
+        }}
       />
 
       {/* 4.5 Jury DevTools Panel */}
@@ -579,6 +755,13 @@ export function App() {
           onSoundEnabledChange={audio.setSoundEnabled}
           onPreviewSound={audio.previewSound}
         />
+      )}
+
+      {/* Live Toast Notifications */}
+      {toastMessage && (
+        <div className={`app-toast toast-${toastMessage.type}`}>
+          <span>{toastMessage.text}</span>
+        </div>
       )}
 
       {/* Footer */}

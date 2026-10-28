@@ -60,11 +60,12 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
           return (
             <div
               key={player.id}
-              className={`player-card ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''}`}
+              className={`player-card ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''} ${player.connected === false ? 'disconnected' : ''}`}
               onClick={() => onSelectPlayer?.(index)}
               style={{ cursor: onSelectPlayer ? 'pointer' : 'default' }}
             >
               {isActive && <span className="player-active-tag">Soron van</span>}
+              {player.connected === false && <span className="player-offline-tag">Offline</span>}
 
               <div className="player-header">
                 <div

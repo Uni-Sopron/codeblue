@@ -1046,15 +1046,19 @@ export function useGameEngine() {
     dispatchDevAction({ type: 'instant_victory' });
   }, [dispatchDevAction]);
 
-  const setFullGameState = useCallback((newState: GameState) => {
-    setGameState(newState);
-    if (newState.phase === 'roll') {
-      setHasRolledThisTurn(false);
-      setHasBuiltThisTurn(false);
-      setExtraRollAvailable(false);
-    } else if (newState.phase === 'building' || newState.phase === 'tile_action') {
-      setHasRolledThisTurn(true);
-    }
+  const setFullGameState = useCallback((newStateOrUpdater: GameState | ((prev: GameState) => GameState)) => {
+    setGameState((prev) => {
+      const resolved = typeof newStateOrUpdater === 'function' ? newStateOrUpdater(prev) : newStateOrUpdater;
+      if (resolved.phase === 'roll') {
+        setHasRolledThisTurn(false);
+        setHasBuiltThisTurn(false);
+        setExtraRollAvailable(false);
+      } else if (resolved.phase === 'building' || resolved.phase === 'tile_action') {
+        setHasRolledThisTurn(true);
+      }
+      return resolved;
+    });
+
   }, []);
 
   return {
