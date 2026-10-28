@@ -381,18 +381,46 @@ export function App() {
     engine.rollDice();
   }, [gameState.phase, gameState.isRolling, isMyTurn, engine]);
 
-  // Keyboard shortcut: Space to roll dice
+  // Keyboard shortcut: Unified Space primary loop (Roll -> Confirm Card -> End Turn)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isBankOpen || isClinicOpen || isDevPanelOpen || (e.target instanceof HTMLElement && e.target.closest('input, textarea, select, button, [role="dialog"]'))) return;
-      if (e.code === 'Space' && gameState.phase === 'roll' && !gameState.isRolling && isMyTurn) {
-        e.preventDefault();
-        handleRollDice();
+      if (e.repeat) return;
+      if (
+        isBankOpen ||
+        isClinicOpen ||
+        isDevPanelOpen ||
+        isGameMenuOpen ||
+        (e.target instanceof HTMLElement && e.target.closest('input, textarea, select, button, [role="dialog"]'))
+      ) {
+        return;
+      }
+
+      if (e.code === 'Space' && isMyTurn) {
+        if (gameState.phase === 'roll' && !gameState.isRolling) {
+          e.preventDefault();
+          handleRollDice();
+        } else if (gameState.phase === 'card_modal') {
+          e.preventDefault();
+          engine.resolveCardAction();
+        } else if (gameState.phase === 'building') {
+          e.preventDefault();
+          engine.endTurn();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState.phase, gameState.isRolling, isMyTurn, handleRollDice, isBankOpen, isClinicOpen, isDevPanelOpen]);
+  }, [
+    gameState.phase,
+    gameState.isRolling,
+    isMyTurn,
+    handleRollDice,
+    engine,
+    isBankOpen,
+    isClinicOpen,
+    isDevPanelOpen,
+    isGameMenuOpen,
+  ]);
 
   // Status message for the center board feed
   const statusMessage = useMemo(() => {
@@ -412,10 +440,10 @@ export function App() {
       return `Érkezés: ${currentTile.name} – Kattints a mező eseményének jóváhagyásához!`;
     }
     if (gameState.phase === 'building') {
-      return 'Építkezési lehetőség! Vásárolj új részleget a klinikádhoz vagy fejezd be a köröd!';
+      return 'Építkezési lehetőség! Vásárolj új részleget a klinikádhoz vagy fejezd be a köröd (Space)!';
     }
     if (gameState.phase === 'card_modal') {
-      return 'Eseménykártya felhúzva! Olvasd el a lapot a folytatáshoz.';
+      return 'Eseménykártya felhúzva! Olvasd el a lapot a folytatáshoz (Space vagy jóváhagyás).';
     }
     return undefined;
   }, [turnTimeoutRemaining, gameMode, isMyTurn, gameState.phase, activePlayer, currentTile]);
@@ -660,17 +688,6 @@ export function App() {
                   </div>
                 ) : (
                   <>
-                    {gameState.phase === 'tile_action' && (
-                      <button
-                        type="button"
-                        className="action-btn-primary animate-pulse"
-                        onClick={engine.resolveTileAction}
-                      >
-                        <span>Mező eseményének végrehajtása</span>
-                        <ArrowRight size={18} />
-                      </button>
-                    )}
-
                     {gameState.phase === 'building' && (
                       <div className="building-phase-controls">
                         <button
@@ -684,11 +701,13 @@ export function App() {
 
                         <button
                           type="button"
-                          className="action-btn-primary"
+                          className="action-btn-primary action-btn-end-turn"
                           onClick={engine.endTurn}
+                          title="Kör Befejezése (Space billentyű vagy kattintás)"
                         >
                           <span>Kör Befejezése</span>
                           <ArrowRight size={18} />
+                          <kbd className="space-key-hint">Space</kbd>
                         </button>
                       </div>
                     )}
