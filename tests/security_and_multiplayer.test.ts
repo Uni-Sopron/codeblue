@@ -137,7 +137,7 @@ test('Disconnect auto-pass: next connected player is selected properly', () => {
     { id: 'p3', name: 'Dr. Gamma', connected: true }
   ];
 
-  let currentActiveIndex = 0; // Alpha is disconnected
+  const currentActiveIndex = 0; // Alpha is disconnected
   let nextActiveIndex = (currentActiveIndex + 1) % players.length;
   let attempts = 0;
 

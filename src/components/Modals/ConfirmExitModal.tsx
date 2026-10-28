@@ -114,3 +114,4 @@ export const ConfirmExitModal: React.FC<ConfirmExitModalProps> = ({
 };
 
 export default ConfirmExitModal;
+
