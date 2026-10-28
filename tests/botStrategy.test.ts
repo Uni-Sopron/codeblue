@@ -31,9 +31,9 @@ function context(doctor = player(), overrides: Partial<BotStrategyContext> = {})
   };
 }
 
-test('the three named AI profiles use existing doctor portraits and distinct colors', () => {
-  assert.deepEqual(BOT_PROFILES.map((profile) => profile.name), ['Dr. AI Neumann', 'Dr. AI Turing', 'Dr. AI Lovelace']);
-  assert.equal(new Set(BOT_PROFILES.map((profile) => profile.color)).size, 3);
+test('the four named AI profiles use existing doctor portraits and distinct colors', () => {
+  assert.deepEqual(BOT_PROFILES.map((profile) => profile.name), ['Dr. AI Neumann', 'Dr. AI Turing', 'Dr. AI Lovelace', 'Dr. AI Hippokratész']);
+  assert.equal(new Set(BOT_PROFILES.map((profile) => profile.color)).size, 4);
   for (const profile of BOT_PROFILES) {
     const avatar = AVATARS.find((candidate) => candidate.id === profile.avatar)!;
     assert.equal(avatar.color, profile.color);
@@ -70,9 +70,17 @@ test('moving the human to any slot still assigns unique portraits and colors to 
   }
 });
 
-test('invalid player counts and all-bot local games cannot be started', () => {
+test('invalid player counts cannot be started', () => {
   for (const count of [0, 1, 5, 2.5, NaN]) assert.deepEqual(createLocalPlayerConfigs(count, ['human'], []), []);
-  assert.deepEqual(createLocalPlayerConfigs(4, ['bot', 'bot', 'bot', 'bot'], []), []);
+});
+
+test('all-bot demo games are fully supported with 4 unique AI doctors', () => {
+  const configs = createLocalPlayerConfigs(4, ['bot', 'bot', 'bot', 'bot'], []);
+  assert.equal(configs.length, 4);
+  assert.ok(configs.every((c) => c.isAI));
+  assert.equal(new Set(configs.map((c) => c.avatar)).size, 4);
+  assert.equal(new Set(configs.map((c) => c.color)).size, 4);
+  assert.deepEqual(configs.map((c) => c.name), ['Dr. AI Neumann', 'Dr. AI Turing', 'Dr. AI Lovelace', 'Dr. AI Hippokratész']);
 });
 
 test('human turns never produce bot actions', () => {
@@ -283,4 +291,15 @@ test('bot adheres to all board movement rules including relative forward, backwa
   const targetEthics = 9;
   assert.equal(targetStart, 0);
   assert.equal(targetEthics, 9);
+});
+
+test('bot with surplus cash and zero debt deposits surplus into savings', () => {
+  const base = context(player({ cash: 600_000, debt: 0, builtElements: ['reception'] }));
+  const state = { ...base.gameState, phase: 'building' as const, builtThisTurn: true };
+  const action = chooseBotAction({
+    ...base,
+    gameState: state,
+    hasBuiltThisTurn: true,
+  });
+  assert.deepEqual(action, { type: 'deposit', product: 'savings', amount: 200_000 });
 });

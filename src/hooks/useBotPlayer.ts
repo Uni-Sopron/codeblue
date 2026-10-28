@@ -5,7 +5,7 @@ import { chooseBotAction, getBotDelay } from '../utils/botStrategy.ts';
 type BotEngine = Pick<ReturnType<typeof useGameEngine>,
   'gameState' | 'hasBuiltThisTurn' | 'hasRolledThisTurn' | 'extraRollAvailable' | 'canBuyElement'
   | 'rollDice' | 'resolveTileAction' | 'resolveCardAction' | 'buyClinicElement' | 'repayLoan'
-  | 'withdrawBank' | 'endTurn'>;
+  | 'withdrawBank' | 'depositBank' | 'endTurn'>;
 
 interface BotPlayerOptions {
   enabled: boolean;
@@ -32,6 +32,7 @@ export function useBotPlayer(engine: BotEngine, { enabled, paused }: BotPlayerOp
       case 'buy': engine.buyClinicElement(currentAction.elementId); break;
       case 'repay': engine.repayLoan(currentAction.amount); break;
       case 'withdraw': engine.withdrawBank(currentAction.product, currentAction.amount); break;
+      case 'deposit': engine.depositBank(currentAction.product, currentAction.amount); break;
       case 'end_turn': engine.endTurn(); break;
     }
   });

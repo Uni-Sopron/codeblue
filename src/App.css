@@ -321,6 +321,43 @@
   box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
 }
 
+
+.setup-preset-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.setup-preset-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.6);
+  color: #94a3b8;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.setup-preset-btn:hover {
+  background: rgba(30, 41, 59, 0.8);
+  color: #f8fafc;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.setup-preset-btn.active {
+  background: rgba(14, 165, 233, 0.15);
+  border-color: #38bdf8;
+  color: #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+}
+
 .setup-players-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

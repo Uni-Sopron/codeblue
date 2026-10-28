@@ -12,6 +12,7 @@ export type BotAction =
   | { type: 'buy'; elementId: ClinicElementId }
   | { type: 'repay'; amount: number }
   | { type: 'withdraw'; product: BankProduct; amount: number }
+  | { type: 'deposit'; product: BankProduct; amount: number }
   | { type: 'end_turn' };
 
 export interface BotStrategyContext {
@@ -114,6 +115,18 @@ export function chooseBotAction(context: BotStrategyContext): BotAction | null {
           if (withdrawal) return withdrawal;
         }
       }
+
+      // Likvid többlettőke lekötése a Bankban: építkezés után, ha maradt jelentős felesleg
+      if ((hasBuiltThisTurn || state.builtThisTurn) && player.builtElements.length > 0 && !complete && state.phase === 'building') {
+        const surplus = player.cash - BOT_CASH_RESERVE;
+        if (player.debt === 0 && surplus >= 200_000) {
+          const depositAmount = Math.min(200_000, Math.floor(surplus / 100_000) * 100_000);
+          if (depositAmount > 0) {
+            return { type: 'deposit', product: 'savings', amount: depositAmount };
+          }
+        }
+      }
+
       return { type: 'end_turn' };
     }
     default:

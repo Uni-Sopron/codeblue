@@ -5,6 +5,7 @@ export const BOT_PROFILES = [
   { name: 'Dr. AI Neumann', avatar: 'diagnostician', color: '#0d9488' },
   { name: 'Dr. AI Turing', avatar: 'chief_physician', color: '#6366f1' },
   { name: 'Dr. AI Lovelace', avatar: 'resident', color: '#d97706' },
+  { name: 'Dr. AI Hippokratész', avatar: 'surgeon', color: '#0284c7' },
 ] as const;
 
 export type LocalPlayerType = 'human' | 'bot';
@@ -25,7 +26,7 @@ export function createLocalPlayerConfigs(
 ): LocalDoctorConfig[] {
   if (!Number.isInteger(count) || count < 2 || count > 4) return [];
   const types = Array.from({ length: count }, (_, index) => playerTypes[index] ?? 'human');
-  if (!types.includes('human')) return [];
+  // All-bot spectator demo games are allowed
   const humanAvatars = AVATARS.filter((_, index) => types[index] === 'human');
   const available = AVATARS.filter((avatar) => !humanAvatars.some((human) => human.id === avatar.id));
   let botIndex = 0;
