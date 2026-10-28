@@ -8,7 +8,6 @@
   justify-content: center;
   z-index: 999;
   padding: 1rem;
-  perspective: 1200px;
   animation: fadeInBackdrop 0.25s ease-out;
 }
 
@@ -30,8 +29,10 @@
 .card-flipper-scene {
   width: 320px;
   height: 460px;
-  perspective: 1200px;
+  perspective: 1000px;
+  perspective-origin: 50% 50%;
   cursor: pointer;
+  margin: 0 auto;
 }
 
 .card-flipper-inner {
@@ -39,7 +40,8 @@
   height: 100%;
   position: relative;
   transform-style: preserve-3d;
-  transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transform-origin: 50% 50%;
+  transition: transform 0.65s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card-flipper-inner.flipped {
@@ -280,4 +282,34 @@
   background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5);
+}
+
+/* Mobile Responsive Card Layout */
+@media (max-width: 480px) {
+  .card-modal-backdrop {
+    padding: 0.5rem;
+  }
+  .card-flipper-scene {
+    width: min(300px, 86vw);
+    height: min(440px, 76vh);
+  }
+  .card-face-front {
+    padding: 1rem 0.85rem;
+  }
+  .card-front-title {
+    font-size: 1.05rem;
+  }
+  .card-front-desc-box {
+    padding: 0.65rem;
+  }
+  .card-front-instruction {
+    font-size: 0.84rem;
+  }
+  .card-front-flavor {
+    font-size: 0.72rem;
+  }
+  .btn-card-action {
+    padding: 0.65rem 1.25rem;
+    font-size: 0.88rem;
+  }
 }

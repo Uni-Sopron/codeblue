@@ -645,23 +645,49 @@ export function App() {
                       key={count}
                       type="button"
                       className={`count-toggle-btn ${playerCount === count ? 'active' : ''}`}
-                      onClick={() => {
-                        setPlayerCount(count);
-                        setPlayerTypes((previous) => previous.slice(0, count).includes('human')
-                          ? previous : previous.map((type, index) => index === 0 ? 'human' : type));
-                      }}
+                      onClick={() => setPlayerCount(count)}
                     >
                       {count} Orvos
                     </button>
                   ))}
                 </div>
-                <p className="setup-bot-help">Legalább egy emberrel, 1–3 bot ellen is játszhatsz.</p>
+                                <div className="setup-preset-buttons" role="group" aria-label="Gyors játékmód sablonok">
+                  <button
+                    type="button"
+                    className="setup-preset-btn"
+                    onClick={() => setPlayerTypes(['bot', 'bot', 'bot', 'bot'])}
+                    title="Minden játékost bot irányít (Nézői bemutató meccs)"
+                  >
+                    🤖 Teljes Bot Harc (Demó)
+                  </button>
+                  <button
+                    type="button"
+                    className="setup-preset-btn"
+                    onClick={() => setPlayerTypes(['human', 'bot', 'bot', 'bot'])}
+                    title="1 emberi játékos a mesterséges intelligencia ellen"
+                  >
+                    👤 1 Ember + Botok
+                  </button>
+                  <button
+                    type="button"
+                    className="setup-preset-btn"
+                    onClick={() => setPlayerTypes(['human', 'human', 'human', 'human'])}
+                    title="Minden orvost emberi játékos irányít helyben (Hotseat)"
+                  >
+                    👥 Hotseat (Csak Emberek)
+                  </button>
+                </div>
+                <p className="setup-bot-help">
+                  {playerTypes.slice(0, playerCount).every((t) => t === 'bot')
+                    ? '🤖 Teljes Bot Demó mód aktív: az AI orvosok automatikusan fognak egymással játszani nézői módban.'
+                    : 'Válassz gyors sablont vagy állítsd be orvosonként, hogy Ember vagy Bot irányítsa!'}
+                </p>
               </div>
 
               <div className="setup-players-grid">
                 {localConfigs.map((config, idx) => {
                   const avatar = AVATARS.find((candidate) => candidate.id === config.avatar)!;
-                  const lastHuman = !config.isAI && playerTypes.slice(0, playerCount).filter((type) => type === 'human').length === 1;
+                  // Every slot can be freely toggled between human and bot
                   return (
                   <div
                     key={config.id}
@@ -681,8 +707,7 @@ export function App() {
                             key={type}
                             type="button"
                             aria-pressed={playerTypes[idx] === type}
-                            disabled={type === 'bot' && lastHuman}
-                            title={type === 'bot' && lastHuman ? 'Legalább egy emberi játékos szükséges.' : undefined}
+                            disabled={false}
                             onClick={() => setPlayerTypes((previous) => previous.map((value, index) => index === idx ? type : value))}
                           >
                             {type === 'bot' && <Bot size={13} />}
@@ -719,7 +744,7 @@ export function App() {
                 disabled={localConfigs.length !== playerCount}
               >
                 <Play size={20} />
-                <span>Játék Indítása</span>
+                <span>{playerTypes.slice(0, playerCount).every((t) => t === 'bot') ? '🤖 Bot Demó Indítása (Nézői Mód)' : 'Játék Indítása'}</span>
               </button>
             </div>
           </div>
@@ -769,8 +794,19 @@ export function App() {
                   <div className="waiting-turn-badge">
                     <span className="pulse-dot" />
                     <span>
-                      <strong>{activePlayer?.name}</strong>{activePlayer?.isAI ? ' [BOT]' : ''}
-                      {activePlayer?.isAI && canDriveBots && botsPaused ? ' · A bot szünetel.' : ' orvos köre van folyamatban…'}
+                      {gameState.players.every((p) => p.isAI) ? (
+                        <>
+                          <strong>🤖 Botok autonóm meccse zajlik (Nézői mód)</strong>
+                          {activePlayer?.isAI && canDriveBots && botsPaused
+                            ? ' · A botok szünetelnek.'
+                            : ` · Éppen ${activePlayer?.name ?? 'orvos'} köre fut…`}
+                        </>
+                      ) : (
+                        <>
+                          <strong>{activePlayer?.name}</strong>{activePlayer?.isAI ? ' [BOT]' : ''}
+                          {activePlayer?.isAI && canDriveBots && botsPaused ? ' · A bot szünetel.' : ' orvos köre van folyamatban…'}
+                        </>
+                      )}
                     </span>
                   </div>
                 ) : (

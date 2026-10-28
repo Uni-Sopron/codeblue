@@ -97,24 +97,46 @@
 
 @media (max-width: 768px) {
   .pawn-xs {
-    width: 11px;
-    height: 11px;
+    width: 10px;
+    height: 10px;
     border-width: 1px;
   }
   .pawn-sm {
-    width: 14px;
-    height: 14px;
+    width: 13px;
+    height: 13px;
     border-width: 1px;
   }
   .pawn-md {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     border-width: 1.5px;
   }
   .pawn-active {
-    transform: scale(1.08) translateY(-1px);
+    transform: scale(1.06) translateY(-1px);
+    animation: pawnFloatMobile 2s ease-in-out infinite;
   }
   .pawn-pulse-ring {
-    inset: -3px;
+    inset: -2px;
+    animation: pawnPulseMobile 1.8s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+  }
+}
+
+@keyframes pawnFloatMobile {
+  0%, 100% {
+    transform: scale(1.06) translateY(0);
+  }
+  50% {
+    transform: scale(1.08) translateY(-1px);
+  }
+}
+
+@keyframes pawnPulseMobile {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.22);
+    opacity: 0;
   }
 }

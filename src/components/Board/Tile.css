@@ -97,8 +97,10 @@
   left: 4px;
   font-size: 0.65rem;
   font-weight: 800;
-  color: #64748b;
-  letter-spacing: 0.5px;
+  color: #f8fafc;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 2px #000000;
+  z-index: 20;
+  letter-spacing: 0.3px;
   line-height: 1;
   pointer-events: none;
 }
@@ -350,6 +352,14 @@
 
 /* Mobile Performance Optimizations */
 @media (max-width: 768px) {
+  .tile-icon-container svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+  .tile-pawns-container {
+    bottom: 1.5px;
+    gap: 1px;
+  }
   .board-tile {
     backdrop-filter: none !important;
     transition: none !important;
