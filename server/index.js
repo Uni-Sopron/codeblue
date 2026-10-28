@@ -1,629 +1,348 @@
 import express from 'express';
-import { createServer } from 'http';
+import { createServer } from 'node:http';
+import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { Server } from 'socket.io';
 import cors from 'cors';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const publicPath = path.join(__dirname, 'public');
+const filename = fileURLToPath(import.meta.url);
+const publicPath = path.join(path.dirname(filename), 'public');
+const AVATARS = ['surgeon', 'diagnostician', 'chief_physician', 'resident'];
+const TITLES = { surgeon: 'Dr. Sebész', diagnostician: 'Dr. Diagnoszta', chief_physician: 'Dr. Főorvos', resident: 'Dr. Rezidens' };
+const DIRECTORY = 'public-room-directory';
 
-const PORT = process.env.PORT || 3001;
-const app = express();
-
-app.use(cors({ origin: '*' }));
-app.use(express.json({ limit: '256kb' }));
-app.use(express.static(publicPath));
-
-// In-memory room storage
-// Key: roomCode (e.g. "CB-4821"), Value: Room object
-const rooms = new Map();
-
-// Constants & Helpers
-const ALLOWED_AVATARS = ['surgeon', 'diagnostician', 'chief_physician', 'resident'];
-const AVATAR_TITLES = {
-  surgeon: 'Dr. Sebész',
-  diagnostician: 'Dr. Diagnoszta',
-  chief_physician: 'Dr. Főorvos',
-  resident: 'Dr. Rezidens',
-};
-
-function sanitizeName(rawName, fallback = 'Orvos') {
-  if (typeof rawName !== 'string') return fallback;
-  const stripped = rawName.replace(/<[^>]*>?/gm, '').trim();
-  return stripped.length > 0 ? stripped.slice(0, 32) : fallback;
+export function sanitizeName(value, fallback = 'Orvos', maxLength = 32) {
+  if (typeof value !== 'string') return fallback.slice(0, maxLength);
+  const clean = value.replace(/<[^>]*>?/gm, '').replace(/[<>\u0000-\u001f\u007f]/g, '').trim();
+  return (clean || fallback).slice(0, maxLength);
 }
+export const isValidRoomCode = (code) => typeof code === 'string' && /^CB-\d{4}$/.test(code.trim().toUpperCase());
+export const sanitizeAvatar = (avatar) => AVATARS.includes(avatar) ? avatar : AVATARS[0];
+export const sanitizeColor = (color, fallback = '#00b4d8') => typeof color === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color) ? color : fallback;
+const hash = (value, salt = '') => createHash('sha256').update(salt).update(value).digest();
+const safeEqual = (a, b) => Buffer.isBuffer(a) && Buffer.isBuffer(b) && a.length === b.length && timingSafeEqual(a, b);
 
-function isValidRoomCode(code) {
-  return typeof code === 'string' && /^CB-\d{4}$/.test(code.trim().toUpperCase());
-}
-
-function sanitizeAvatar(avatarId) {
-  return ALLOWED_AVATARS.includes(avatarId) ? avatarId : 'surgeon';
-}
-
-function sanitizeColor(color, fallback = '#00b4d8') {
-  if (typeof color === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color)) {
-    return color;
+export function createInitialGameState(players) {
+  const cardDeck = Array.from({ length: 40 }, (_, i) => i + 1);
+  for (let i = cardDeck.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [cardDeck[i], cardDeck[j]] = [cardDeck[j], cardDeck[i]];
   }
-  return fallback;
+  return {
+    players: players.map((p) => ({
+      id: p.id, name: p.name, color: p.color, avatar: p.avatar, avatarTitle: p.avatarTitle,
+      cash: 1_500_000, debt: 0, position: 0, builtElements: [], skipTurns: 0, activeBuffs: [],
+      bank: { savings: 0, clinicalBond: 0, biotechEquity: 0 }, connected: p.connected, isHost: p.isHost,
+      ...(p.isAI ? { isAI: true } : {}),
+    })),
+    activePlayerIndex: 0, turnNumber: 1, phase: 'roll', diceResult: null, isRolling: false,
+    drawnCard: null, cardDeck, discardDeck: [], winner: null, logs: [], roundPassBonusGranted: false,
+  };
 }
 
-// Generate unique 4-digit room code
-function generateRoomCode() {
-  const digits = Math.floor(1000 + Math.random() * 9000);
-  const code = `CB-${digits}`;
-  return rooms.has(code) ? generateRoomCode() : code;
-}
+export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000, roomTtlMs = 3 * 60 * 60 * 1000 } = {}) {
+  const app = express();
+  app.use(cors({ origin: '*' }));
+  app.use(express.json({ limit: '256kb' }));
+  app.use(express.static(publicPath));
+  const httpServer = createServer(app);
+  const io = new Server(httpServer, { cors: { origin: '*', methods: ['GET', 'POST'] }, pingTimeout: 30_000, pingInterval: 10_000, maxHttpBufferSize: 512 * 1024 });
+  const rooms = new Map();
+  const secrets = new Map();
+  const messageCounts = new Map();
 
-// Rate Limiter per socket connection to prevent flooding
-const socketMessageCounts = new Map();
-function isRateLimited(socketId) {
-  const now = Date.now();
-  const entry = socketMessageCounts.get(socketId) || { count: 0, resetAt: now + 1000 };
-  if (now > entry.resetAt) {
-    entry.count = 1;
-    entry.resetAt = now + 1000;
-  } else {
-    entry.count += 1;
-  }
-  socketMessageCounts.set(socketId, entry);
-  return entry.count > 40; // Max 40 events per second
-}
-
-// Periodic Garbage Collector for inactive rooms (TTL: 3 hours)
-const ROOM_TTL_MS = 3 * 60 * 60 * 1000;
-setInterval(() => {
-  const now = Date.now();
-  for (const [code, room] of rooms.entries()) {
-    const lastActive = room.lastActive || new Date(room.createdAt).getTime();
-    if (now - lastActive > ROOM_TTL_MS) {
-      rooms.delete(code);
-      console.log(`[GC] Evicted inactive room ${code}`);
-    }
-  }
-}, 30 * 60 * 1000);
-
-// Health check endpoint
-app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'codeblue-multiplayer',
-    activeRooms: rooms.size,
-    timestamp: new Date().toISOString(),
+  const roomView = (room) => ({
+    code: room.code, name: room.name, visibility: room.visibility, hasPin: room.hasPin,
+    hostSocketId: room.hostSocketId, players: room.players.map((p) => ({
+      socketId: p.socketId, id: p.id, name: p.name, avatar: p.avatar, avatarTitle: p.avatarTitle,
+      color: p.color, isHost: p.isHost, connected: p.connected, ...(p.isAI ? { isAI: true } : {}),
+    })),
+    gameStarted: room.gameStarted, gameState: room.gameState, createdAt: room.createdAt,
+    rematchVotes: { ...room.rematchVotes },
   });
-});
-
-app.get('/rooms', (_req, res) => {
-  const publicRooms = Array.from(rooms.values()).map((r) => ({
-    code: r.code,
-    playerCount: r.players.length,
-    gameStarted: r.gameStarted,
-    createdAt: r.createdAt,
-  }));
-  res.json({ rooms: publicRooms });
-});
-
-// Single Page Application Fallback
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/socket.io') || req.path === '/health' || req.path === '/rooms') {
-    return next();
-  }
-  res.sendFile(path.join(publicPath, 'index.html'), (err) => {
-    if (err) next();
+  const publicRooms = () => Array.from(rooms.values()).filter((r) => r.visibility === 'public').map((room) => {
+    const host = room.players.find((p) => p.isHost) || room.players[0];
+    return { code: room.code, name: room.name, hostName: host.name, hostAvatar: host.avatar,
+      playerCount: room.players.length, maxPlayers: 4, gameStarted: room.gameStarted, hasPin: room.hasPin };
   });
-});
+  const publishDirectory = () => io.to(DIRECTORY).emit('rooms:update', { rooms: publicRooms() });
+  const publishRoom = (room) => io.to(room.code).emit('room:update', { room: roomView(room) });
+  const clearWatchdog = (room) => { if (room.disconnectTimer) clearTimeout(room.disconnectTimer); room.disconnectTimer = null; };
+  const deleteRoom = (code) => { const room = rooms.get(code); if (room) clearWatchdog(room); rooms.delete(code); secrets.delete(code); };
+  const limited = (socketId) => {
+    const stamp = now();
+    let entry = messageCounts.get(socketId);
+    if (!entry || stamp >= entry.resetAt) entry = { count: 0, resetAt: stamp + 1000 };
+    entry.count++;
+    messageCounts.set(socketId, entry);
+    return entry.count > 40;
+  };
+  const transferHost = (room) => {
+    const currentHost = room.players.find((p) => p.isHost && p.connected && !p.isAI);
+    const host = currentHost || room.players.find((p) => p.connected && !p.isAI);
+    if (host) { room.hostSocketId = host.socketId; room.players.forEach((p) => { p.isHost = p.id === host.id; }); }
+  };
+  const scheduleWatchdog = (room) => {
+    clearWatchdog(room);
+    const state = room.gameState;
+    const active = state && room.players.find((p) => p.id === state.players[state.activePlayerIndex]?.id);
+    if (!room.gameStarted || !active || active.connected || state.winner) return;
+    room.disconnectTimer = setTimeout(() => {
+      room.disconnectTimer = null;
+      if (!rooms.has(room.code) || active.connected || room.gameState?.players[room.gameState.activePlayerIndex]?.id !== active.id) return;
+      let next = -1;
+      for (let offset = 1; offset < room.gameState.players.length; offset++) {
+        const index = (room.gameState.activePlayerIndex + offset) % room.gameState.players.length;
+        if (room.players.some((p) => p.id === room.gameState.players[index].id && p.connected)) { next = index; break; }
+      }
+      if (next === -1) return;
+      const previousIndex = room.gameState.activePlayerIndex;
+      room.gameState = { ...room.gameState, activePlayerIndex: next, phase: 'roll', diceResult: null, isRolling: false, drawnCard: null,
+        roundPassBonusGranted: false, turnNumber: room.gameState.turnNumber + (next <= previousIndex ? 1 : 0) };
+      io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
+      io.to(room.code).emit('turn:auto_passed', { newActivePlayerIndex: next, gameState: room.gameState });
+    }, disconnectTimeoutMs);
+    room.disconnectTimer.unref?.();
+  };
 
-const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-  },
-  pingTimeout: 30000,
-  pingInterval: 10000,
-  maxHttpBufferSize: 512 * 1024, // 512 KB payload max
-});
+  const gc = setInterval(() => {
+    let changed = false;
+    for (const [code, room] of rooms) if (now() - room.lastActive > roomTtlMs) { deleteRoom(code); changed = true; }
+    if (changed) publishDirectory();
+  }, 30 * 60 * 1000);
+  gc.unref();
+  app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'codeblue-multiplayer', activeRooms: rooms.size, timestamp: new Date(now()).toISOString() }));
+  app.get('/rooms', (_req, res) => res.json({ rooms: publicRooms() }));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/socket.io')) return next();
+    res.sendFile(path.join(publicPath, 'index.html'), (error) => { if (error) next(); });
+  });
 
-io.on('connection', (socket) => {
-  console.log(`[Socket] Client connected: ${socket.id}`);
-
-  // Current room of this socket
-  let currentRoomCode = null;
-
-  // 1. Create a new room (Host)
-  socket.on('room:create', ({ playerName, avatarId, color }, callback) => {
-    try {
-      if (isRateLimited(socket.id)) return;
-
-      const roomCode = generateRoomCode();
-      const sanitizedName = sanitizeName(playerName, '1. Orvos');
-      const chosenAvatar = sanitizeAvatar(avatarId);
-      const chosenColor = sanitizeColor(color, '#00b4d8');
-
-      const hostPlayer = {
-        socketId: socket.id,
-        id: 'p1',
-        name: sanitizedName,
-        avatar: chosenAvatar,
-        avatarTitle: AVATAR_TITLES[chosenAvatar] || 'Dr. Sebész',
-        color: chosenColor,
-        isHost: true,
-        connected: true,
-      };
-
-      const room = {
-        code: roomCode,
-        hostSocketId: socket.id,
-        players: [hostPlayer],
-        gameStarted: false,
-        gameState: null,
-        rematchVotes: {},
-        disconnectTimer: null,
-        createdAt: new Date().toISOString(),
-        lastActive: Date.now(),
-      };
-
-      rooms.set(roomCode, room);
-      socket.join(roomCode);
-      currentRoomCode = roomCode;
-
-      console.log(`[Room Created] ${roomCode} by ${hostPlayer.name} (${socket.id})`);
-
-      const response = { success: true, roomCode, player: hostPlayer, room };
+  io.on('connection', (socket) => {
+    let currentRoomCode = null;
+    let wrongPins = 0;
+    let pinLockedUntil = 0;
+    const fail = (callback, error, errorCode = 'ROOM_ERROR', extra = {}) => {
+      const response = { success: false, error, errorCode, ...extra };
       if (typeof callback === 'function') callback(response);
-      socket.emit('room:created', response);
-    } catch (err) {
-      console.error('[room:create error]', err);
-      if (typeof callback === 'function') callback({ success: false, error: err.message });
-    }
-  });
+      socket.emit('room:error', response);
+    };
+    const checkRate = (callback) => { if (!limited(socket.id)) return true; fail(callback, 'Túl sok kérés. Próbáld újra rövidesen.', 'RATE_LIMITED'); return false; };
+    const memberRoom = (code) => {
+      if (!isValidRoomCode(code)) return null;
+      const room = rooms.get(code.trim().toUpperCase());
+      return room && currentRoomCode === room.code && room.players.some((p) => p.socketId === socket.id && p.connected) ? room : null;
+    };
+    const alreadyJoined = () => !!(currentRoomCode && memberRoom(currentRoomCode));
+    const issueToken = (room, player) => {
+      const token = randomBytes(32).toString('hex');
+      secrets.get(room.code).tokens.set(player.id, hash(token));
+      return token;
+    };
+    const success = (room, player, callback, event) => {
+      const response = { success: true, roomCode: room.code, room: roomView(room), player: roomView(room).players.find((p) => p.id === player.id), reconnectToken: issueToken(room, player) };
+      if (typeof callback === 'function') callback(response);
+      if (event) socket.emit(event, { success: true, roomCode: room.code, room: response.room, player: response.player });
+    };
 
-  // 2. Join existing room
-  socket.on('room:join', ({ roomCode, playerName, avatarId, color }, callback) => {
-    try {
-      if (isRateLimited(socket.id)) return;
+    socket.on('rooms:subscribe', (callback) => {
+      if (!checkRate(typeof callback === 'function' ? callback : undefined)) return;
+      socket.join(DIRECTORY);
+      const payload = { rooms: publicRooms() };
+      socket.emit('rooms:list', payload);
+      if (typeof callback === 'function') callback({ success: true, ...payload });
+    });
+    socket.on('rooms:unsubscribe', () => socket.leave(DIRECTORY));
 
-      if (!isValidRoomCode(roomCode)) {
-        const error = 'Érvénytelen szobakód formátum! (Példa: CB-4821)';
-        if (typeof callback === 'function') callback({ success: false, error });
-        socket.emit('room:error', { error });
-        return;
-      }
+    socket.on('room:create', (data = {}, callback) => {
+      if (!checkRate(callback)) return;
+      if (alreadyJoined()) return fail(callback, 'Előbb hagyd el a jelenlegi szobát.', 'ALREADY_IN_ROOM');
+      const { playerName, avatarId, color, name, visibility = 'public', pin = '' } = data || {};
+      if (visibility !== 'public' && visibility !== 'private') return fail(callback, 'Érvénytelen láthatóság.', 'INVALID_VISIBILITY');
+      if (typeof pin !== 'string' || (pin !== '' && !/^\d{4}$/.test(pin))) return fail(callback, 'A PIN pontosan 4 számjegy legyen.', 'INVALID_PIN');
+      if (rooms.size >= 9000) return fail(callback, 'A szerver megtelt.', 'SERVER_FULL');
+      let code;
+      do { code = `CB-${randomInt(1000, 10000)}`; } while (rooms.has(code));
+      const hostName = sanitizeName(playerName, '1. Orvos');
+      const avatar = sanitizeAvatar(avatarId);
+      const player = { socketId: socket.id, id: 'p1', name: hostName, avatar, avatarTitle: TITLES[avatar], color: sanitizeColor(color), isHost: true, connected: true };
+      const room = { code, name: sanitizeName(name, `${hostName} Klinikája`, 24), visibility, hasPin: pin !== '', hostSocketId: socket.id,
+        players: [player], gameStarted: false, gameState: null, rematchVotes: {}, disconnectTimer: null, createdAt: new Date(now()).toISOString(), lastActive: now() };
+      const salt = randomBytes(16).toString('hex');
+      secrets.set(code, { salt, pinHash: pin ? hash(pin, salt) : null, tokens: new Map() });
+      rooms.set(code, room);
+      socket.join(code);
+      currentRoomCode = code;
+      success(room, player, callback, 'room:created');
+      publishDirectory();
+    });
 
-      const normalizedCode = roomCode.trim().toUpperCase();
-      const room = rooms.get(normalizedCode);
-
-      if (!room) {
-        const error = `A megadott szoba (${normalizedCode}) nem található!`;
-        if (typeof callback === 'function') callback({ success: false, error });
-        socket.emit('room:error', { error });
-        return;
-      }
-
-      if (room.gameStarted) {
-        const error = 'A játék ebben a szobában már elkezdődött!';
-        if (typeof callback === 'function') callback({ success: false, error });
-        socket.emit('room:error', { error });
-        return;
-      }
-
-      if (room.players.length >= 4) {
-        const error = 'A szoba megtelt! Maximum 4 orvos játszhat.';
-        if (typeof callback === 'function') callback({ success: false, error });
-        socket.emit('room:error', { error });
-        return;
-      }
-
-      // Check for avatar collision
-      let chosenAvatar = sanitizeAvatar(avatarId);
-      const avatarTaken = room.players.some((p) => p.avatar === chosenAvatar);
-      if (avatarTaken) {
-        const takenAvatars = new Set(room.players.map((p) => p.avatar));
-        const available = ALLOWED_AVATARS.find((a) => !takenAvatars.has(a));
-        if (available) {
-          chosenAvatar = available;
+    socket.on('room:join', (data = {}, callback) => {
+      if (!checkRate(callback)) return;
+      if (alreadyJoined()) return fail(callback, 'Előbb hagyd el a jelenlegi szobát.', 'ALREADY_IN_ROOM');
+      const { roomCode, playerName, avatarId, color, pin } = data || {};
+      if (pinLockedUntil > now()) return fail(callback, 'Túl sok hibás PIN. Várj egy percet.', 'PIN_LOCKED', { retryAfterSeconds: Math.ceil((pinLockedUntil - now()) / 1000) });
+      if (pinLockedUntil) { wrongPins = 0; pinLockedUntil = 0; }
+      if (!isValidRoomCode(roomCode)) return fail(callback, 'Érvénytelen szobakód! (Példa: CB-4821)', 'INVALID_ROOM_CODE');
+      const room = rooms.get(roomCode.trim().toUpperCase());
+      if (!room) return fail(callback, 'A szoba nem található.', 'ROOM_NOT_FOUND');
+      if (room.gameStarted) return fail(callback, 'A játék ebben a szobában már elkezdődött.', 'GAME_STARTED');
+      if (room.players.length >= 4) return fail(callback, 'A szoba megtelt.', 'ROOM_FULL');
+      const secret = secrets.get(room.code);
+      if (room.hasPin) {
+        if (pin === undefined || pin === '') return fail(callback, 'Add meg a szoba 4 jegyű PIN-kódját.', 'PIN_REQUIRED');
+        if (typeof pin !== 'string' || !safeEqual(hash(pin, secret.salt), secret.pinHash)) {
+          wrongPins++;
+          if (wrongPins >= 5) { pinLockedUntil = now() + 60_000; return fail(callback, 'Öt hibás PIN után a belépés 60 másodpercig zárolva.', 'PIN_LOCKED', { retryAfterSeconds: 60 }); }
+          return fail(callback, 'Hibás PIN-kód.', 'PIN_INVALID');
         }
       }
+      wrongPins = 0;
+      const id = ['p1', 'p2', 'p3', 'p4'].find((candidate) => !room.players.some((p) => p.id === candidate));
+      let avatar = sanitizeAvatar(avatarId);
+      if (room.players.some((p) => p.avatar === avatar)) avatar = AVATARS.find((candidate) => !room.players.some((p) => p.avatar === candidate));
+      const player = { socketId: socket.id, id, name: sanitizeName(playerName, `${id.slice(1)}. Orvos`), avatar, avatarTitle: TITLES[avatar], color: sanitizeColor(color, '#38bdf8'), isHost: false, connected: true };
+      room.players.push(player);
+      room.lastActive = now();
+      socket.join(room.code);
+      currentRoomCode = room.code;
+      success(room, player, callback, 'room:joined');
+      publishRoom(room);
+      publishDirectory();
+    });
 
-      const playerIndex = room.players.length + 1;
-      const sanitizedName = sanitizeName(playerName, `${playerIndex}. Orvos`);
-      const chosenColor = sanitizeColor(color, '#38bdf8');
-
-      const newPlayer = {
-        socketId: socket.id,
-        id: `p${playerIndex}`,
-        name: sanitizedName,
-        avatar: chosenAvatar,
-        avatarTitle: AVATAR_TITLES[chosenAvatar] || `Dr. ${chosenAvatar}`,
-        color: chosenColor,
-        isHost: false,
-        connected: true,
-      };
-
-      room.players.push(newPlayer);
-      room.lastActive = Date.now();
-      socket.join(normalizedCode);
-      currentRoomCode = normalizedCode;
-
-      console.log(`[Player Joined] ${newPlayer.name} joined room ${normalizedCode}`);
-
-      const response = { success: true, roomCode: normalizedCode, player: newPlayer, room };
-      if (typeof callback === 'function') callback(response);
-      socket.emit('room:joined', response);
-
-      // Notify all other players in the room
-      io.to(normalizedCode).emit('room:update', { room });
-    } catch (err) {
-      console.error('[room:join error]', err);
-      if (typeof callback === 'function') callback({ success: false, error: err.message });
-    }
-  });
-
-  // 3. Start game (Host only)
-  socket.on('room:start', ({ roomCode, initialGameState }, callback) => {
-    try {
-      if (isRateLimited(socket.id)) return;
-
-      const normalizedCode = roomCode?.trim().toUpperCase();
-      const room = rooms.get(normalizedCode);
-      if (!room) return;
-
-      if (room.hostSocketId !== socket.id) {
-        const error = 'Csak a szobagazda indíthatja el a játékot!';
-        if (typeof callback === 'function') callback({ success: false, error });
-        return;
-      }
-
-      if (room.players.length < 2) {
-        const error = 'Legalább 2 orvos szükséges a játék elindításához!';
-        if (typeof callback === 'function') callback({ success: false, error });
-        return;
-      }
-
+    socket.on('room:start', (data = {}, callback) => {
+      if (!checkRate(callback)) return;
+      const room = memberRoom(data?.roomCode);
+      if (!room || room.hostSocketId !== socket.id) return fail(callback, 'Csak a szobagazda indíthatja a játékot.', 'HOST_REQUIRED');
+      if (room.gameStarted) return fail(callback, 'A játék már elkezdődött.', 'GAME_STARTED');
+      if (room.players.length < 2) return fail(callback, 'Legalább 2 orvos szükséges.', 'NOT_ENOUGH_PLAYERS');
       room.gameStarted = true;
-      room.gameState = initialGameState;
-      room.lastActive = Date.now();
-
-      console.log(`[Game Started] Room ${normalizedCode} with ${room.players.length} players!`);
-
-      io.to(normalizedCode).emit('game:started', {
-        roomCode: normalizedCode,
-        room,
-        gameState: initialGameState,
-      });
-
+      room.gameState = createInitialGameState(room.players);
+      room.lastActive = now();
+      io.to(room.code).emit('game:started', { roomCode: room.code, room: roomView(room), gameState: room.gameState });
       if (typeof callback === 'function') callback({ success: true });
-    } catch (err) {
-      console.error('[room:start error]', err);
-      if (typeof callback === 'function') callback({ success: false, error: err.message });
-    }
-  });
+      publishDirectory();
+    });
 
-  // 4. Relay action across room
-  socket.on('game:action', ({ roomCode, actionType, payload, newGameState }) => {
-    try {
-      if (isRateLimited(socket.id)) return;
+    const acceptsState = (room, state) => {
+      if (!room?.gameStarted || !state || !Array.isArray(state.players) || state.players.length !== room.players.length) return false;
+      if (!Number.isInteger(state.activePlayerIndex) || state.activePlayerIndex < 0 || state.activePlayerIndex >= state.players.length) return false;
+      if (!state.players.every((p, i) => p?.id === room.gameState.players[i]?.id)) return false;
+      return true;
+    };
+    socket.on('game:action', (data = {}) => {
+      if (!checkRate()) return;
+      const room = memberRoom(data?.roomCode);
+      if (!room || !acceptsState(room, data.newGameState)) return;
+      room.gameState = data.newGameState;
+      room.lastActive = now();
+      socket.to(room.code).emit('game:action_broadcast', { actionType: data.actionType, payload: data.payload, newGameState: room.gameState, senderSocketId: socket.id });
+      scheduleWatchdog(room);
+    });
+    socket.on('game:sync', (data = {}) => {
+      if (!checkRate()) return;
+      const room = memberRoom(data?.roomCode);
+      if (!room || !acceptsState(room, data.gameState)) return;
+      room.gameState = data.gameState;
+      room.lastActive = now();
+      socket.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
+      scheduleWatchdog(room);
+    });
 
-      const normalizedCode = roomCode?.trim().toUpperCase();
-      const room = rooms.get(normalizedCode);
-      if (!room) return;
-
-      room.lastActive = Date.now();
-      if (newGameState) {
-        room.gameState = newGameState;
-      }
-
-      socket.to(normalizedCode).emit('game:action_broadcast', {
-        actionType,
-        payload,
-        newGameState,
-        senderSocketId: socket.id,
-      });
-    } catch (err) {
-      console.error('[game:action error]', err);
-    }
-  });
-
-  // 5. Full state sync broadcast
-  socket.on('game:sync', ({ roomCode, gameState }) => {
-    try {
-      if (isRateLimited(socket.id)) return;
-
-      const normalizedCode = roomCode?.trim().toUpperCase();
-      const room = rooms.get(normalizedCode);
-      if (!room) return;
-
-      room.lastActive = Date.now();
-      room.gameState = gameState;
-      socket.to(normalizedCode).emit('game:sync_broadcast', { gameState });
-    } catch (err) {
-      console.error('[game:sync error]', err);
-    }
-  });
-
-  // 6. Player Reconnection
-  socket.on('room:reconnect', ({ roomCode, playerId }, callback) => {
-    try {
-      const normalizedCode = roomCode?.trim().toUpperCase();
-      const room = rooms.get(normalizedCode);
-      if (!room) {
-        if (typeof callback === 'function') callback({ success: false, error: 'A szoba már nem létezik.' });
-        return;
-      }
-
-      const player = room.players.find((p) => p.id === playerId);
-      if (!player) {
-        if (typeof callback === 'function') callback({ success: false, error: 'Játékos nem található a szobában.' });
-        return;
-      }
-
-      if (room.disconnectTimer) {
-        clearTimeout(room.disconnectTimer);
-        room.disconnectTimer = null;
-      }
-
+    socket.on('room:reconnect', (data = {}, callback) => {
+      if (!checkRate(callback)) return;
+      const { roomCode, playerId, reconnectToken } = data || {};
+      if (alreadyJoined()) return fail(callback, 'Már csatlakoztál egy szobához.', 'ALREADY_IN_ROOM');
+      const room = isValidRoomCode(roomCode) && rooms.get(roomCode.trim().toUpperCase());
+      const player = room && room.players.find((p) => p.id === playerId && !p.isAI);
+      const expected = room && secrets.get(room.code)?.tokens.get(playerId);
+      if (!player || typeof reconnectToken !== 'string' || !safeEqual(hash(reconnectToken), expected)) return fail(callback, 'A visszacsatlakozási azonosító érvénytelen.', 'INVALID_RECONNECT');
+      if (player.connected) return fail(callback, 'A játékos már csatlakozva van.', 'PLAYER_CONNECTED');
       player.socketId = socket.id;
       player.connected = true;
-      socket.join(normalizedCode);
-      currentRoomCode = normalizedCode;
-      room.lastActive = Date.now();
+      socket.join(room.code);
+      currentRoomCode = room.code;
+      room.lastActive = now();
+      transferHost(room);
+      if (room.gameState) room.gameState = { ...room.gameState, players: room.gameState.players.map((p) => p.id === player.id ? { ...p, connected: true } : p) };
+      scheduleWatchdog(room);
+      const token = issueToken(room, player);
+      if (typeof callback === 'function') callback({ success: true, room: roomView(room), player: roomView(room).players.find((p) => p.id === player.id), gameState: room.gameState, reconnectToken: token });
+      if (room.gameState) socket.emit('game:sync_broadcast', { gameState: room.gameState });
+      io.to(room.code).emit('player:reconnected', { playerId: player.id, playerName: player.name });
+      publishRoom(room);
+      publishDirectory();
+    });
 
-      console.log(`[Player Reconnected] ${player.name} (${player.id}) in room ${normalizedCode}`);
-      const response = { success: true, room, player, gameState: room.gameState };
-      if (typeof callback === 'function') callback(response);
-      io.to(normalizedCode).emit('player:reconnected', {
-        playerId: player.id,
-        playerName: player.name,
-      });
-      io.to(normalizedCode).emit('room:update', { room });
-    } catch (err) {
-      console.error('[room:reconnect error]', err);
-      if (typeof callback === 'function') callback({ success: false, error: err.message });
-    }
-  });
-
-  // 7. Rematch Vote & Synchronized Game Reset
-  socket.on('room:rematch_vote', ({ roomCode, ready }) => {
-    try {
-      if (isRateLimited(socket.id)) return;
-      const normalizedCode = roomCode?.trim().toUpperCase();
-      const room = rooms.get(normalizedCode);
-      if (!room) return;
-
+    socket.on('room:rematch_vote', (data = {}) => {
+      if (!checkRate()) return;
+      const room = memberRoom(data?.roomCode);
+      if (!room?.gameStarted) return;
       const player = room.players.find((p) => p.socketId === socket.id);
-      if (!player) return;
-
-      if (!room.rematchVotes) room.rematchVotes = {};
-
-      if (!ready) {
+      if (data.ready !== true) {
         room.rematchVotes = {};
-        io.to(normalizedCode).emit('room:rematch_cancelled', {
-          cancelledBy: player.name,
-          cancelledById: player.id,
-        });
-        io.to(normalizedCode).emit('room:rematch_update', {
-          votes: {},
-          requestedBy: player.name,
-          requestedById: player.id,
-          isHost: !!player.isHost,
-          ready: false,
-        });
+        io.to(room.code).emit('room:rematch_cancelled', { cancelledBy: player.name, cancelledById: player.id });
+        io.to(room.code).emit('room:rematch_update', { votes: {}, requestedBy: player.name, requestedById: player.id, isHost: player.isHost, ready: false });
         return;
       }
-
       room.rematchVotes[player.id] = true;
-      room.lastActive = Date.now();
-
-      io.to(normalizedCode).emit('room:rematch_update', {
-        votes: room.rematchVotes,
-        requestedBy: player.name,
-        requestedById: player.id,
-        isHost: !!player.isHost,
-        ready: !!ready,
-      });
-
-      // Check if all connected players have voted ready
-      const connectedPlayers = room.players.filter((p) => p.connected);
-      const allReady =
-        connectedPlayers.length >= 2 &&
-        connectedPlayers.every((p) => room.rematchVotes[p.id] === true);
-
-      if (allReady) {
+      room.lastActive = now();
+      io.to(room.code).emit('room:rematch_update', { votes: { ...room.rematchVotes }, requestedBy: player.name, requestedById: player.id, isHost: player.isHost, ready: true });
+      const connected = room.players.filter((p) => p.connected);
+      if (connected.length >= 2 && connected.every((p) => room.rematchVotes[p.id] === true)) {
         room.rematchVotes = {};
-        if (room.disconnectTimer) {
-          clearTimeout(room.disconnectTimer);
-          room.disconnectTimer = null;
-        }
-
-        const freshPlayers = room.players.map((p, idx) => ({
-          id: `p${idx + 1}`,
-          name: p.name,
-          color: p.color,
-          avatar: p.avatar,
-          avatarTitle: p.avatarTitle,
-          cash: 1500000,
-          debt: 0,
-          position: 0,
-          builtElements: [],
-          skipTurns: 0,
-          activeBuffs: [],
-          connected: p.connected,
-          isHost: p.isHost,
-        }));
-
-        const freshGameState = {
-          phase: 'roll',
-          players: freshPlayers,
-          activePlayerIndex: 0,
-          roundNumber: 1,
-          dice: [1, 1],
-          isRolling: false,
-          pendingEvent: null,
-          lastRollSum: 2,
-          winner: null,
-          lastEventMessage: 'Új játék indult! Visszavágó kezdetét vette.',
-        };
-
-        room.gameStarted = true;
-        room.gameState = freshGameState;
-        room.lastActive = Date.now();
-
-        console.log(`[Rematch Triggered] Room ${normalizedCode} reset and started fresh!`);
-        io.to(normalizedCode).emit('room:game_reset', {
-          roomCode: normalizedCode,
-          room,
-          gameState: freshGameState,
-        });
+        clearWatchdog(room);
+        room.gameState = createInitialGameState(room.players);
+        io.to(room.code).emit('room:game_reset', { roomCode: room.code, room: roomView(room), gameState: room.gameState });
+        scheduleWatchdog(room);
       }
-    } catch (err) {
-      console.error('[room:rematch_vote error]', err);
-    }
-  });
+    });
 
-  // 8. Clean Room Leave
-  socket.on('room:leave', ({ roomCode }) => {
-    try {
-      const normalizedCode = roomCode?.trim().toUpperCase();
-      const room = rooms.get(normalizedCode);
+    const leave = (explicit) => {
+      const room = currentRoomCode && rooms.get(currentRoomCode);
+      currentRoomCode = null;
       if (!room) return;
-
-      const playerIndex = room.players.findIndex((p) => p.socketId === socket.id);
-      if (playerIndex !== -1) {
-        const leavingPlayer = room.players[playerIndex];
-        socket.leave(normalizedCode);
-        currentRoomCode = null;
-
-        if (!room.gameStarted) {
-          room.players.splice(playerIndex, 1);
-          if (leavingPlayer.isHost && room.players.length > 0) {
-            room.players[0].isHost = true;
-            room.hostSocketId = room.players[0].socketId;
-          }
-          if (room.players.length === 0) {
-            rooms.delete(normalizedCode);
-          } else {
-            io.to(normalizedCode).emit('room:update', { room });
-          }
-        } else {
-          leavingPlayer.connected = false;
-          io.to(normalizedCode).emit('player:disconnected', {
-            playerId: leavingPlayer.id,
-            playerName: leavingPlayer.name,
-            reason: 'left',
-          });
-        }
+      const index = room.players.findIndex((p) => p.socketId === socket.id);
+      if (index < 0) return;
+      const player = room.players[index];
+      socket.leave(room.code);
+      room.lastActive = now();
+      if (!room.gameStarted) {
+        room.players.splice(index, 1);
+        secrets.get(room.code).tokens.delete(player.id);
+        transferHost(room);
+        if (!room.players.length) deleteRoom(room.code);
+        else publishRoom(room);
+      } else {
+        player.connected = false;
+        if (explicit) secrets.get(room.code).tokens.delete(player.id);
+        transferHost(room);
+        room.gameState = { ...room.gameState, players: room.gameState.players.map((p) => ({ ...p, connected: room.players.find((rp) => rp.id === p.id)?.connected ?? false, isHost: room.players.find((rp) => rp.id === p.id)?.isHost ?? false })) };
+        const active = room.gameState.players[room.gameState.activePlayerIndex]?.id === player.id;
+        io.to(room.code).emit('player:disconnected', { playerId: player.id, playerName: player.name, ...(explicit ? { reason: 'left' } : {}), isActivePlayer: active, ...(active ? { timeoutSeconds: Math.ceil(disconnectTimeoutMs / 1000) } : {}) });
+        if (explicit) io.to(room.code).emit('room:player_left', { playerId: player.id, playerName: player.name });
+        publishRoom(room);
+        scheduleWatchdog(room);
       }
-    } catch (err) {
-      console.error('[room:leave error]', err);
-    }
+      publishDirectory();
+    };
+    socket.on('room:leave', (data = {}, callback) => {
+      if (!memberRoom(data?.roomCode)) return fail(callback, 'Nem vagy ennek a szobának a tagja.', 'NOT_A_MEMBER');
+      leave(true);
+      if (typeof callback === 'function') callback({ success: true });
+    });
+    socket.on('disconnect', () => { messageCounts.delete(socket.id); leave(false); });
   });
 
-  // 9. Handle disconnect with Turn Timeout Watchdog
-  socket.on('disconnect', () => {
-    console.log(`[Socket] Client disconnected: ${socket.id}`);
-    socketMessageCounts.delete(socket.id);
+  return { app, httpServer, io,
+    close: async () => { clearInterval(gc); for (const room of rooms.values()) clearWatchdog(room); await new Promise((resolve) => io.close(resolve)); },
+  };
+}
 
-    if (currentRoomCode) {
-      const room = rooms.get(currentRoomCode);
-      if (room) {
-        const playerIndex = room.players.findIndex((p) => p.socketId === socket.id);
-        if (playerIndex !== -1) {
-          const leavingPlayer = room.players[playerIndex];
-
-          if (!room.gameStarted) {
-            // In lobby: remove player entirely
-            room.players.splice(playerIndex, 1);
-
-            // Reassign host if host left
-            if (leavingPlayer.isHost && room.players.length > 0) {
-              room.players[0].isHost = true;
-              room.hostSocketId = room.players[0].socketId;
-            }
-
-            // Cleanup if empty
-            if (room.players.length === 0) {
-              rooms.delete(currentRoomCode);
-              console.log(`[Room Deleted] ${currentRoomCode} is empty.`);
-            } else {
-              io.to(currentRoomCode).emit('room:update', { room });
-            }
-          } else {
-            // In active game: preserve state and allow reconnection
-            leavingPlayer.connected = false;
-            room.lastActive = Date.now();
-
-            const isActivePlayer =
-              room.gameState &&
-              room.gameState.activePlayerIndex === playerIndex;
-
-            if (isActivePlayer) {
-              if (room.disconnectTimer) {
-                clearTimeout(room.disconnectTimer);
-              }
-              const timeoutSeconds = 30;
-              io.to(currentRoomCode).emit('player:disconnected', {
-                playerId: leavingPlayer.id,
-                playerName: leavingPlayer.name,
-                timeoutSeconds,
-                isActivePlayer: true,
-              });
-
-              room.disconnectTimer = setTimeout(() => {
-                const activeRoom = rooms.get(currentRoomCode);
-                if (
-                  activeRoom &&
-                  activeRoom.gameState &&
-                  activeRoom.gameState.activePlayerIndex === playerIndex &&
-                  !leavingPlayer.connected
-                ) {
-                  // Auto-pass turn to next player
-                  activeRoom.gameState.activePlayerIndex =
-                    (activeRoom.gameState.activePlayerIndex + 1) %
-                    activeRoom.players.length;
-                  activeRoom.gameState.phase = 'roll';
-                  activeRoom.gameState.isRolling = false;
-                  activeRoom.gameState.pendingEvent = null;
-                  activeRoom.gameState.lastEventMessage = `${leavingPlayer.name} távolléte miatt a kör automatikusan átadásra került.`;
-
-                  console.log(
-                    `[Turn Auto-Passed] Room ${currentRoomCode} advanced turn due to timeout of ${leavingPlayer.name}`
-                  );
-                  io.to(currentRoomCode).emit('game:sync_broadcast', {
-                    gameState: activeRoom.gameState,
-                  });
-                  io.to(currentRoomCode).emit('turn:auto_passed', {
-                    newActivePlayerIndex: activeRoom.gameState.activePlayerIndex,
-                    gameState: activeRoom.gameState,
-                  });
-                }
-              }, timeoutSeconds * 1000);
-            } else {
-              io.to(currentRoomCode).emit('player:disconnected', {
-                playerId: leavingPlayer.id,
-                playerName: leavingPlayer.name,
-                isActivePlayer: false,
-              });
-            }
-          }
-        }
-      }
-    }
-  });
-});
-
-// Process-level Crash Guards
-process.on('uncaughtException', (err) => {
-  console.error('[Uncaught Exception]', err);
-});
-process.on('unhandledRejection', (reason) => {
-  console.error('[Unhandled Rejection]', reason);
-});
-
-httpServer.listen(PORT, () => {
-  console.log(`===============================================`);
-  console.log(`🏥 CodeBlue Multiplayer Server running on :${PORT}`);
-  console.log(`🌐 Ready for real-time WebSocket connections!`);
-  console.log(`===============================================`);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === filename) {
+  const server = createGameServer();
+  const port = process.env.PORT || 3001;
+  server.httpServer.listen(port, () => console.log(`CodeBlue Multiplayer Server running on :${port}`));
+}
