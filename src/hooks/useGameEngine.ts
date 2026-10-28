@@ -9,6 +9,7 @@ import type {
   ClinicElementId,
   GameLog,
   ActiveBuff,
+  BankProduct,
 } from '../types/game.ts';
 import { GAME_CONSTANTS } from '../types/game.ts';
 import { getTileById } from '../data/tiles.ts';
@@ -17,6 +18,8 @@ import { CLINIC_ELEMENTS, getClinicElementById } from '../data/clinicElements.ts
 import { AVATARS } from '../data/avatars.ts';
 import { applyDevAction } from '../utils/devTools.ts';
 import type { DevAction } from '../utils/devTools.ts';
+import { accrueBankForMovement, applyBankTransaction, getBankBalances } from '../utils/bank.ts';
+import type { BankAccrual, BankTransaction } from '../utils/bank.ts';
 
 export interface PlayerSetupConfig {
   id: PlayerId;
@@ -43,6 +46,23 @@ function shuffleArray<T>(array: T[]): T[] {
  */
 function createLogId(): string {
   return `log_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+function createBankReturnLog(accrual: BankAccrual): GameLog | null {
+  const bank = getBankBalances(accrual.player);
+  if (bank.savings === 0 && bank.clinicalBond === 0 && bank.biotechEquity === 0) return null;
+  const formatReturn = (amount: number) => `${amount >= 0 ? '+' : ''}${amount.toLocaleString('hu-HU')} KK`;
+  return {
+    id: createLogId(),
+    playerId: accrual.player.id,
+    playerName: accrual.player.name,
+    timestamp: Date.now(),
+    type: 'money',
+    message: `START banki elszámolás: megtakarítás ${formatReturn(accrual.returns.savings)}, `
+      + `klinikai kötvény ${formatReturn(accrual.returns.clinicalBond)}, `
+      + `biotech részvény ${formatReturn(accrual.returns.biotechEquity)}`
+      + (accrual.biotechRate === null ? '.' : ` (${Math.round(accrual.biotechRate * 100)}%).`),
+  };
 }
 
 /**
@@ -159,6 +179,7 @@ export function useGameEngine() {
           skipTurns: 0,
           activeBuffs: [],
           isAI: !!cfg.isAI,
+          bank: getBankBalances(null),
         };
       });
 
@@ -207,6 +228,7 @@ export function useGameEngine() {
 
     // Kockadobás (1 - 6)
     const roll = Math.floor(Math.random() * 6) + 1;
+    const bankRandom = Math.random();
     setGameState((prev) => ({ ...prev, isRolling: true }));
 
     // Rövid vizuális időzítés után léptetés
@@ -232,8 +254,9 @@ export function useGameEngine() {
           }
         }
 
+        const bankAccrual = accrueBankForMovement(currentP, roll, () => bankRandom);
         const updatedPlayer: Player = {
-          ...currentP,
+          ...bankAccrual.player,
           position: newPos,
           cash: newCash,
         };
@@ -264,6 +287,11 @@ export function useGameEngine() {
             timestamp: Date.now(),
             type: 'money',
           });
+        }
+
+        if (passedStart) {
+          const bankLog = createBankReturnLog(bankAccrual);
+          if (bankLog) newLogs.push(bankLog);
         }
 
         return {
@@ -424,6 +452,7 @@ export function useGameEngine() {
           switch (tile.specialAction) {
             case 'ambulance_speed':
               setExtraRollAvailable(true);
+              nextPhase = 'roll';
               newLogs.push({
                 id: createLogId(),
                 playerId: currentP.id,
@@ -562,6 +591,8 @@ export function useGameEngine() {
    * 4. Eseménykártya hatásának érvényesítése
    */
   const resolveCardAction = useCallback(() => {
+    // A StrictMode-ban megismételt állapotfrissítő ugyanazt a piaci mintát használja.
+    const bankRandom = Math.random();
     setGameState((prev) => {
       if (prev.phase !== 'card_modal' || prev.winner) return prev;
       const currentP = prev.players[prev.activePlayerIndex];
@@ -571,6 +602,7 @@ export function useGameEngine() {
       const updatedP = { ...currentP };
       const newLogs: GameLog[] = [];
       const action = card.action;
+      let startBonusSettled = prev.roundPassBonusGranted;
 
       newLogs.push({
         id: createLogId(),
@@ -639,6 +671,11 @@ export function useGameEngine() {
 
           // Körbefutás előre vagy hátra
           if (newPos >= GAME_CONSTANTS.TOTAL_TILES) {
+            const accrual = accrueBankForMovement(updatedP, steps, () => bankRandom);
+            updatedP.bank = accrual.player.bank;
+            const bankLog = createBankReturnLog(accrual);
+            if (bankLog) newLogs.push(bankLog);
+            startBonusSettled = true;
             newPos = newPos % GAME_CONSTANTS.TOTAL_TILES;
             updatedP.cash += GAME_CONSTANTS.START_PASS_BONUS;
             newLogs.push({
@@ -667,9 +704,21 @@ export function useGameEngine() {
 
         case 'move_absolute': {
           const target = action.targetTileId ?? 0;
+          // A valódi START-kártya előre vezet a főbejárathoz; a zsűri teleportja nem kamatozik.
+          if (target === 0 && updatedP.position > 0) {
+            const accrual = accrueBankForMovement(
+              updatedP,
+              GAME_CONSTANTS.TOTAL_TILES - updatedP.position,
+              () => bankRandom,
+            );
+            updatedP.bank = accrual.player.bank;
+            const bankLog = createBankReturnLog(accrual);
+            if (bankLog) newLogs.push(bankLog);
+          }
           updatedP.position = target;
           if (action.amount) {
             updatedP.cash += action.amount;
+            if (target === 0) startBonusSettled = true;
           }
           newLogs.push({
             id: createLogId(),
@@ -749,6 +798,7 @@ export function useGameEngine() {
         players: updatedPlayers,
         phase: action.type === 'extra_roll' || extraRollAvailable ? 'roll' : 'building',
         drawnCard: null,
+        roundPassBonusGranted: startBonusSettled,
         logs: [...newLogs, ...prev.logs],
       };
     });
@@ -852,81 +902,46 @@ export function useGameEngine() {
   /**
    * 7. Banki műveletek: Hitelfelvétel és hiteltörlesztés
    */
-  const takeLoan = useCallback(
-    (amount: number) => {
-      if (amount <= 0) return;
-      const roundedAmount = Math.ceil(amount / GAME_CONSTANTS.LOAN_UNIT) * GAME_CONSTANTS.LOAN_UNIT;
+  const transactBank = useCallback((action: BankTransaction) => {
+    const id = createLogId();
+    const timestamp = Date.now();
+    setGameState((prev) => {
+      const next = applyBankTransaction(prev, action);
+      if (next === prev) return prev;
+      const before = prev.players[prev.activePlayerIndex];
+      const player = next.players[next.activePlayerIndex];
+      const labels = { savings: 'megtakarítás', clinicalBond: 'klinikai kötvény', biotechEquity: 'biotech részvény' };
+      let message: string;
+      if (action.type === 'deposit' || action.type === 'withdraw') {
+        message = `${player.name}: ${labels[action.product]} ${action.type === 'deposit' ? 'elhelyezése' : 'visszaváltása'} `
+          + `${action.amount.toLocaleString('hu-HU')} KK értékben.`;
+      } else if (action.type === 'borrow') {
+        message = `${player.name} banki hitelt vett fel: +${(player.cash - before.cash).toLocaleString('hu-HU')} KK. `
+          + `Fennálló tartozás: ${player.debt.toLocaleString('hu-HU')} KK.`;
+      } else {
+        message = `${player.name} visszafizetett ${(before.debt - player.debt).toLocaleString('hu-HU')} KK hitelt. `
+          + `Maradék hitel: ${player.debt.toLocaleString('hu-HU')} KK.`;
+      }
+      const log: GameLog = { id, timestamp, playerId: player.id, playerName: player.name, message, type: 'money' };
+      return { ...next, logs: [log, ...prev.logs].slice(0, 100) };
+    });
+  }, []);
 
-      setGameState((prev) => {
-        const currentP = prev.players[prev.activePlayerIndex];
-        if (!currentP) return prev;
+  const takeLoan = useCallback((amount: number) => {
+    transactBank({ type: 'borrow', amount });
+  }, [transactBank]);
 
-        const updatedPlayer: Player = {
-          ...currentP,
-          cash: currentP.cash + roundedAmount,
-          debt: currentP.debt + roundedAmount,
-        };
+  const repayLoan = useCallback((amount: number) => {
+    transactBank({ type: 'repay', amount });
+  }, [transactBank]);
 
-        const updatedPlayers = [...prev.players];
-        updatedPlayers[prev.activePlayerIndex] = updatedPlayer;
+  const depositBank = useCallback((product: BankProduct, amount: number) => {
+    transactBank({ type: 'deposit', product, amount });
+  }, [transactBank]);
 
-        return {
-          ...prev,
-          players: updatedPlayers,
-          logs: [
-            {
-              id: createLogId(),
-              playerId: currentP.id,
-              playerName: currentP.name,
-              message: `${currentP.name} banki hitelt vett fel: +${roundedAmount.toLocaleString()} KK. Fennálló tartozás: ${updatedPlayer.debt.toLocaleString()} KK.`,
-              timestamp: Date.now(),
-              type: 'money',
-            },
-            ...prev.logs,
-          ],
-        };
-      });
-    },
-    [],
-  );
-
-  const repayLoan = useCallback(
-    (amount: number) => {
-      setGameState((prev) => {
-        const currentP = prev.players[prev.activePlayerIndex];
-        if (!currentP || currentP.debt <= 0) return prev;
-
-        const actualRepay = Math.min(amount, currentP.cash, currentP.debt);
-        if (actualRepay <= 0) return prev;
-
-        const updatedPlayer: Player = {
-          ...currentP,
-          cash: currentP.cash - actualRepay,
-          debt: currentP.debt - actualRepay,
-        };
-
-        const updatedPlayers = [...prev.players];
-        updatedPlayers[prev.activePlayerIndex] = updatedPlayer;
-
-        return {
-          ...prev,
-          players: updatedPlayers,
-          logs: [
-            {
-              id: createLogId(),
-              playerId: currentP.id,
-              playerName: currentP.name,
-              message: `${currentP.name} visszafizetett ${actualRepay.toLocaleString()} KK hitelt. Maradék hitel: ${updatedPlayer.debt.toLocaleString()} KK.`,
-              timestamp: Date.now(),
-              type: 'money',
-            },
-            ...prev.logs,
-          ],
-        };
-      });
-    },
-    [],
-  );
+  const withdrawBank = useCallback((product: BankProduct, amount: number) => {
+    transactBank({ type: 'withdraw', product, amount });
+  }, [transactBank]);
 
   /**
    * 8. Kör lezárása és játékosváltás
@@ -1047,7 +1062,11 @@ export function useGameEngine() {
   }, [dispatchDevAction]);
 
   const setFullGameState = useCallback((newState: GameState) => {
-    setGameState(newState);
+    setGameState({
+      ...newState,
+      players: newState.players.map((player) => ({ ...player, bank: getBankBalances(player) })),
+      winner: newState.winner ? { ...newState.winner, bank: getBankBalances(newState.winner) } : null,
+    });
     if (newState.phase === 'roll') {
       setHasRolledThisTurn(false);
       setHasBuiltThisTurn(false);
@@ -1071,6 +1090,8 @@ export function useGameEngine() {
     canBuyElement,
     takeLoan,
     repayLoan,
+    depositBank,
+    withdrawBank,
     endTurn,
     resetGame,
     setFullGameState,

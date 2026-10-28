@@ -1,158 +1,177 @@
-import React from 'react';
-import type { Player } from '../../types/game.ts';
+import { useEffect, useRef, useState } from 'react';
+import { AlertCircle, ArrowDownLeft, ArrowUpRight, Landmark, PiggyBank, TrendingUp, Wallet, X } from 'lucide-react';
+import type { BankProduct, Player } from '../../types/game.ts';
 import { GAME_CONSTANTS } from '../../types/game.ts';
-import {
-  Landmark,
-  X,
-  Wallet,
-  AlertCircle,
-  PlusCircle,
-  MinusCircle,
-  CheckCircle2,
-  Info,
-} from 'lucide-react';
+import { getBankBalances } from '../../utils/bank.ts';
 import './BankModal.css';
 
 interface BankModalProps {
   isOpen: boolean;
   onClose: () => void;
   player: Player | null;
+  canTransact: boolean;
   onTakeLoan: (amount: number) => void;
   onRepayLoan: (amount: number) => void;
+  onDeposit: (product: BankProduct, amount: number) => void;
+  onWithdraw: (product: BankProduct, amount: number) => void;
 }
 
-export const BankModal: React.FC<BankModalProps> = ({
-  isOpen,
-  onClose,
-  player,
-  onTakeLoan,
-  onRepayLoan,
-}) => {
-  if (!isOpen || !player) {
-    return null;
-  }
+const formatAmount = (amount: number) => `${amount.toLocaleString('hu-HU')} KK`;
+const tabs = [
+  { id: 'loans', label: 'Hitelkezelés', icon: Landmark },
+  { id: 'savings', label: 'Megtakarítás', icon: PiggyBank },
+  { id: 'investments', label: 'Befektetések', icon: TrendingUp },
+] as const;
+type BankTab = typeof tabs[number]['id'];
 
-  const unit = GAME_CONSTANTS.LOAN_UNIT; // 200 000 KK
-  const canRepayFull = player.debt > 0 && player.cash >= player.debt;
-  const canRepayPartial = player.debt > 0 && player.cash >= unit;
+interface ProductCardProps {
+  product: BankProduct;
+  title: string;
+  rate: string;
+  description: string;
+  balance: number;
+  cash: number;
+  canTransact: boolean;
+  onDeposit: BankModalProps['onDeposit'];
+  onWithdraw: BankModalProps['onWithdraw'];
+}
+
+function ProductCard({ product, title, rate, description, balance, cash, canTransact, onDeposit, onWithdraw }: ProductCardProps) {
+  const [amount, setAmount] = useState('100000');
+  const value = /^\d+$/.test(amount) ? Number(amount) : 0;
+  const validAmount = Number.isSafeInteger(value) && value > 0;
+
+  return (
+    <section className={`bank-product bank-product-${product}`}>
+      <div className="bank-product-heading">
+        <h3>{title}</h3>
+        <span className="bank-rate">{rate}</span>
+      </div>
+      <p className="bank-product-rule">{description}</p>
+      <div className="bank-product-balance" aria-live="polite">
+        <span>Aktuális egyenleg</span>
+        <strong>{formatAmount(balance)}</strong>
+      </div>
+      <label className="bank-amount-label" htmlFor={`bank-amount-${product}`}>Összeg (KK)</label>
+      <div className="bank-amount-row">
+        <input id={`bank-amount-${product}`} type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="off" value={amount}
+          onChange={(event) => setAmount(event.target.value)} aria-invalid={amount !== '' && !validAmount} disabled={!canTransact} />
+        {[100_000, 200_000].map((preset) => (
+          <button key={preset} type="button" className="bank-preset" disabled={!canTransact} onClick={() => setAmount(String(preset))}>{preset / 1000} ezer</button>
+        ))}
+      </div>
+      <div className="bank-product-actions">
+        <button type="button" className="bank-button bank-button-primary" disabled={!canTransact || !validAmount || value > cash} onClick={() => onDeposit(product, value)}>
+          <ArrowUpRight size={16} /> {product === 'savings' ? 'Befizetés' : 'Vásárlás'}
+        </button>
+        <button type="button" className="bank-button bank-button-secondary" disabled={!canTransact || !validAmount || value > balance} onClick={() => onWithdraw(product, value)}>
+          <ArrowDownLeft size={16} /> {product === 'savings' ? 'Kivét' : 'Visszaváltás'}
+        </button>
+      </div>
+      <button type="button" className="bank-withdraw-all" disabled={!canTransact || balance <= 0} onClick={() => onWithdraw(product, balance)}>Teljes egyenleg kivétele</button>
+    </section>
+  );
+}
+
+function BankDialog({ onClose, player, canTransact, onTakeLoan, onRepayLoan, onDeposit, onWithdraw }: Omit<BankModalProps, 'isOpen' | 'player'> & { player: Player }) {
+  const [tab, setTab] = useState<BankTab>('loans');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const balances = getBankBalances(player);
+  const unit = GAME_CONSTANTS.LOAN_UNIT;
+  const partialRepayment = Math.min(unit, player.debt);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    dialogRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, []);
 
   return (
     <div className="bank-modal-backdrop" onClick={onClose}>
-      <div className="bank-modal-card" onClick={(e) => e.stopPropagation()}>
-        <div className="bank-header">
-          <div className="bank-header-title">
-            <Landmark className="bank-icon" />
-            <div>
-              <h2 className="bank-title">Klinikai Finanszírozási Bank</h2>
-              <p className="bank-subtitle">Hitelkezelés és Likviditási Központ</p>
-            </div>
+      <div className="bank-modal-card" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="bank-title" tabIndex={-1}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') { event.stopPropagation(); onClose(); }
+          if (event.key !== 'Tab') return;
+          const focusable = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [tabindex="0"]');
+          if (!focusable?.length) return;
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { event.preventDefault(); last.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        }}>
+        <header className="bank-header">
+          <img src="/assets/bank_hq.jpg" alt="" className="bank-hero" />
+          <div className="bank-header-copy">
+            <span className="bank-eyebrow"><Landmark size={15} /> CODEBLUE BANK</span>
+            <h2 id="bank-title">Klinikai Magánbank</h2>
+            <p>{player.name} pénzügyei</p>
           </div>
-          <button type="button" className="btn-bank-close" onClick={onClose} aria-label="Bezárás">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
+          <button type="button" className="btn-bank-close" onClick={onClose} aria-label="Bank bezárása"><X size={20} /></button>
+        </header>
         <div className="bank-body">
-          {/* Pénzügyi áttekintő */}
-          <div className="bank-summary-grid">
-            <div className="summary-box cash">
-              <span className="summary-label">
-                <Wallet className="w-3.5 h-3.5 text-emerald-400" />
-                Rendelkezésre álló tőke
-              </span>
-              <p className="summary-val cash">{player.cash.toLocaleString()} KK</p>
-            </div>
-            <div className="summary-box debt">
-              <span className="summary-label">
-                <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
-                Fennálló tartozás
-              </span>
-              <p className="summary-val debt">{player.debt.toLocaleString()} KK</p>
-            </div>
+          <div className="bank-summary-grid" aria-live="polite">
+            <div className="bank-summary cash"><span><Wallet size={14} /> Készpénz</span><strong>{formatAmount(player.cash)}</strong></div>
+            <div className="bank-summary debt"><span><AlertCircle size={14} /> Tartozás</span><strong>{formatAmount(player.debt)}</strong></div>
+            <div className="bank-summary"><span><PiggyBank size={14} /> Megtakarítás</span><strong>{formatAmount(balances.savings)}</strong></div>
+            <div className="bank-summary"><span><TrendingUp size={14} /> Befektetések</span><strong>{formatAmount(balances.clinicalBond + balances.biotechEquity)}</strong></div>
           </div>
-
-          {/* Hitelfelvétel */}
-          <div className="bank-section">
-            <h3 className="bank-section-title">
-              <PlusCircle className="w-4 h-4 text-sky-400" />
-              Gyors Hitelfelvétel
-            </h3>
-            <p className="bank-notice">
-              <Info className="w-3.5 h-3.5 shrink-0 text-sky-400" />
-              Minimális egység: {unit.toLocaleString()} KK. A felvett összeg azonnal a számládra kerül.
-            </p>
-            <div className="bank-quick-buttons">
-              <button
-                type="button"
-                className="btn-loan"
-                onClick={() => onTakeLoan(unit)}
-              >
-                +{unit.toLocaleString()} KK
-              </button>
-              <button
-                type="button"
-                className="btn-loan"
-                onClick={() => onTakeLoan(unit * 2)}
-              >
-                +{(unit * 2).toLocaleString()} KK
-              </button>
-              <button
-                type="button"
-                className="btn-loan"
-                onClick={() => onTakeLoan(1_000_000)}
-              >
-                +1 000 000 KK
-              </button>
-            </div>
+          <div className="bank-tabs" role="tablist" aria-label="Banki szolgáltatások">
+            {tabs.map(({ id, label, icon: Icon }, index) => (
+              <button key={id} id={`bank-tab-${id}`} type="button" role="tab" aria-selected={tab === id} aria-controls={`bank-panel-${id}`} tabIndex={tab === id ? 0 : -1}
+                onClick={() => setTab(id)}
+                onKeyDown={(event) => {
+                  const offset = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+                  if (!offset && event.key !== 'Home' && event.key !== 'End') return;
+                  event.preventDefault();
+                  const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[tabs.length - 1] : tabs[(index + offset + tabs.length) % tabs.length];
+                  setTab(next.id);
+                  document.getElementById(`bank-tab-${next.id}`)?.focus();
+                }}><Icon size={17} /><span>{label}</span></button>
+            ))}
           </div>
-
-          {/* Hiteltörlesztés */}
-          <div className="bank-section">
-            <h3 className="bank-section-title">
-              <MinusCircle className="w-4 h-4 text-emerald-400" />
-              Tartozás Törlesztése
-            </h3>
-
-            {player.debt === 0 ? (
-              <p className="text-sm text-emerald-400 flex items-center gap-1.5 my-2">
-                <CheckCircle2 className="w-4 h-4" />
-                Nincs fennálló tartozásod! A klinika adósságmentes.
-              </p>
-            ) : (
-              <>
-                <p className="bank-notice">
-                  A győzelemhez 0 KK adósság szükséges a játék végén!
-                </p>
-                <div className="flex gap-2 mt-1">
-                  <button
-                    type="button"
-                    className="btn-repay"
-                    disabled={!canRepayPartial}
-                    onClick={() => onRepayLoan(Math.min(unit, player.debt))}
-                  >
-                    Törlesztés: {Math.min(unit, player.debt).toLocaleString()} KK
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-repay"
-                    disabled={!canRepayFull}
-                    onClick={() => onRepayLoan(player.debt)}
-                  >
-                    Teljes törlesztés ({player.debt.toLocaleString()} KK)
-                  </button>
-                </div>
-              </>
+          {!canTransact && <p className="bank-notice">Banki műveletek a saját körödben, dobás előtt vagy építkezéskor érhetők el.</p>}
+          <div id={`bank-panel-${tab}`} role="tabpanel" aria-labelledby={`bank-tab-${tab}`} tabIndex={0}>
+            {tab === 'loans' && (
+              <div className="bank-loan-grid">
+                <section className="bank-product">
+                  <h3>Hitelfelvétel</h3>
+                  <p className="bank-product-rule">{formatAmount(unit)} egységekben, azonnali jóváírással.</p>
+                  <div className="bank-loan-amounts">
+                    {[unit, unit * 2, 1_000_000].map((amount) => <button key={amount} type="button" className="bank-button bank-button-primary" disabled={!canTransact} onClick={() => onTakeLoan(amount)}>+{formatAmount(amount)}</button>)}
+                  </div>
+                </section>
+                <section className="bank-product">
+                  <h3>Hiteltörlesztés</h3>
+                  <p className="bank-product-rule">A győzelemhez minden tartozást vissza kell fizetned.</p>
+                  {player.debt > 0 ? <div className="bank-loan-amounts">
+                    <button type="button" className="bank-button bank-button-secondary" disabled={!canTransact || player.cash < partialRepayment} onClick={() => onRepayLoan(partialRepayment)}>Törlesztés: {formatAmount(partialRepayment)}</button>
+                    <button type="button" className="bank-button bank-button-secondary" disabled={!canTransact || player.cash < player.debt} onClick={() => onRepayLoan(player.debt)}>Teljes törlesztés</button>
+                  </div> : <p className="bank-debt-free">Nincs fennálló tartozásod.</p>}
+                </section>
+              </div>
             )}
+            {tab === 'savings' && <ProductCard product="savings" title="Megtakarítási betét" rate="+5% / START" description="Minden előre START-áthaladáskor 5% kamat kerül a betétedhez. Bármikor kiveheted a saját körödben." balance={balances.savings} cash={player.cash} canTransact={canTransact} onDeposit={onDeposit} onWithdraw={onWithdraw} />}
+            {tab === 'investments' && <div className="bank-investment-grid">
+              <ProductCard product="clinicalBond" title="Klinikai Kötvény" rate="+10% / START" description="Minden előre START-áthaladáskor 10% hozam kerül a kötvény egyenlegéhez." balance={balances.clinicalBond} cash={player.cash} canTransact={canTransact} onDeposit={onDeposit} onWithdraw={onWithdraw} />
+              <ProductCard product="biotechEquity" title="Biotech Részvény" rate="−10%…+20%" description="START-áthaladáskor −10%, −5%, 0%, +10% vagy +20% változás, egyenlő eséllyel." balance={balances.biotechEquity} cash={player.cash} canTransact={canTransact} onDeposit={onDeposit} onWithdraw={onWithdraw} />
+            </div>}
           </div>
+          {tab !== 'loans' && <p className="bank-notice">A hozam egész KK-ra kerekítve az egyenleghez kerül. Építkezéshez és a győzelemhez előbb váltsd készpénzre.</p>}
         </div>
-
-        <div className="bank-footer">
-          <button type="button" className="btn-bank-done" onClick={onClose}>
-            Rendben
-          </button>
-        </div>
+        <footer className="bank-footer"><button type="button" className="bank-button bank-button-secondary" onClick={onClose}>Vissza a játékhoz</button></footer>
       </div>
     </div>
   );
-};
+}
+
+export function BankModal({ isOpen, player, ...props }: BankModalProps) {
+  return isOpen && player ? <BankDialog key={player.id} player={player} {...props} /> : null;
+}
+
 export default BankModal;

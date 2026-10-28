@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { BOARD_TILES } from './data/tiles.ts';
 import { AVATARS } from './data/avatars.ts';
+import { canUseBank } from './utils/bank.ts';
 import { useGameEngine } from './hooks/useGameEngine.ts';
 import { useGameAudio } from './hooks/useGameAudio.ts';
 import type { PlayerId, GamePhase, GameState } from './types/game.ts';
@@ -184,6 +185,7 @@ export function App() {
   // Keyboard shortcut: Space to roll dice
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isBankOpen || isClinicOpen || isDevPanelOpen || (e.target instanceof HTMLElement && e.target.closest('input, textarea, select, button, [role="dialog"]'))) return;
       if (e.code === 'Space' && gameState.phase === 'roll' && !gameState.isRolling && isMyTurn) {
         e.preventDefault();
         handleRollDice();
@@ -191,7 +193,7 @@ export function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState.phase, gameState.isRolling, isMyTurn, handleRollDice]);
+  }, [gameState.phase, gameState.isRolling, isMyTurn, handleRollDice, isBankOpen, isClinicOpen, isDevPanelOpen]);
 
   // Status message for the center board feed
   const statusMessage = useMemo(() => {
@@ -519,7 +521,7 @@ export function App() {
       <CardModal
         card={gameState.drawnCard}
         isOpen={gameState.phase === 'card_modal'}
-        onConfirm={engine.resolveCardAction}
+        onConfirm={() => { if (isMyTurn) engine.resolveCardAction(); }}
       />
 
       {/* 4.2 Bank / Debt Modal */}
@@ -527,8 +529,11 @@ export function App() {
         isOpen={isBankOpen || gameState.phase === 'bank_modal'}
         onClose={() => setIsBankOpen(false)}
         player={activePlayer}
-        onTakeLoan={engine.takeLoan}
-        onRepayLoan={engine.repayLoan}
+        canTransact={isMyTurn && canUseBank(gameState)}
+        onTakeLoan={(amount) => { if (isMyTurn) engine.takeLoan(amount); }}
+        onRepayLoan={(amount) => { if (isMyTurn) engine.repayLoan(amount); }}
+        onDeposit={(product, amount) => { if (isMyTurn) engine.depositBank(product, amount); }}
+        onWithdraw={(product, amount) => { if (isMyTurn) engine.withdrawBank(product, amount); }}
       />
 
       {/* 4.3 Clinic Dashboard / Blueprint View */}
