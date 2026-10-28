@@ -79,8 +79,10 @@ export function chooseBotAction(context: BotStrategyContext): BotAction | null {
     || !Number.isSafeInteger(player.debt) || player.debt < 0) return null;
 
   switch (state.phase) {
-    case 'roll':
-      return !hasRolledThisTurn || extraRollAvailable ? { type: 'roll' } : null;
+    case 'roll': {
+      const canRoll = !hasRolledThisTurn || extraRollAvailable || Boolean(state.extraRollAvailable);
+      return canRoll ? { type: 'roll' } : null;
+    }
     case 'tile_action':
       return { type: 'resolve_tile' };
     case 'card_modal':

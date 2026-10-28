@@ -513,6 +513,7 @@ export function useGameEngine() {
         ],
         roundPassBonusGranted: false,
         builtThisTurn: false,
+        extraRollAvailable: false,
       });
 
       setHasRolledThisTurn(false);
@@ -543,7 +544,13 @@ export function useGameEngine() {
     // Rövid vizuális időzítés után léptetés
 rollTimer.current = setTimeout(() => {
       rollTimer.current = null;
-      let isExtraRoll = false;
+      let landsOnAmbulance = false;
+      if (activePlayer) {
+        const nextPos = (activePlayer.position + roll) % GAME_CONSTANTS.TOTAL_TILES;
+        const destTile = getTileById(nextPos);
+        landsOnAmbulance = destTile?.type === 'special' && destTile.specialAction === 'ambulance_speed';
+      }
+
       setGameState((prev) => {
         const currentP = prev.players[prev.activePlayerIndex];
         if (!currentP || prev.phase !== 'roll' || !prev.isRolling) return prev;
@@ -611,8 +618,6 @@ rollTimer.current = setTimeout(() => {
           prev.discardDeck,
         );
 
-        isExtraRoll = outcome.extraRoll;
-
         const updatedPlayers = [...prev.players];
         updatedPlayers[prev.activePlayerIndex] = outcome.player;
 
@@ -631,14 +636,12 @@ rollTimer.current = setTimeout(() => {
         };
       });
 
-      if (isExtraRoll) {
+      if (landsOnAmbulance) {
         setExtraRollAvailable(true);
         setHasRolledThisTurn(false);
       } else {
         setHasRolledThisTurn(true);
-        if (extraRollAvailable) {
-          setExtraRollAvailable(false);
-        }
+        setExtraRollAvailable(false);
       }
     }, 400);
   }, [activePlayer, gameState.phase, gameState.isRolling, gameState.winner, gameState.extraRollAvailable, hasRolledThisTurn, extraRollAvailable]);
@@ -1121,6 +1124,7 @@ rollTimer.current = setTimeout(() => {
         drawnCard: null,
         roundPassBonusGranted: false,
         builtThisTurn: false,
+        extraRollAvailable: false,
         logs: [...skipLogs, ...prev.logs],
       };
     });

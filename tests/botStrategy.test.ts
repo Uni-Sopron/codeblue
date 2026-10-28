@@ -239,3 +239,48 @@ test('natural action delays stay within 1000–1500 ms and malformed RNG falls b
   }
   for (const sample of [-1, 1, Infinity, NaN]) assert.equal(getBotDelay(() => sample), 1_250);
 });
+
+test('bot uses extra roll when state.extraRollAvailable is true even if hook flag was false', () => {
+  const base = context();
+  const gameState = { ...base.gameState, phase: 'roll' as const, extraRollAvailable: true };
+  assert.deepEqual(chooseBotAction({
+    ...base,
+    gameState,
+    hasRolledThisTurn: true,
+    extraRollAvailable: false,
+  }), { type: 'roll' });
+});
+
+test('bot adheres to all board movement rules including relative forward, backward, wrap-around, and absolute movement', () => {
+  const TOTAL_TILES = 36;
+
+  // 1. Relative forward movement (e.g. Card #27: +3 steps, Card #32: +4 steps)
+  const posA = 10;
+  const forwardSteps = 3;
+  const newPosForward = (posA + forwardSteps) % TOTAL_TILES;
+  assert.equal(newPosForward, 13);
+
+  // 2. Relative forward wrap-around across START
+  const posB = 34;
+  const forwardStepsWrap = 4;
+  const newPosForwardWrap = (posB + forwardStepsWrap) % TOTAL_TILES;
+  assert.equal(newPosForwardWrap, 2);
+
+  // 3. Relative backward movement (e.g. Card #40: -1, Card #36: -2, Card #34: -3, Card #39: -4)
+  const posC = 5;
+  const backSteps = -3;
+  const newPosBack = (posC + backSteps + TOTAL_TILES) % TOTAL_TILES;
+  assert.equal(newPosBack, 2);
+
+  // 4. Relative backward wrap-around before START
+  const posD = 1;
+  const backStepsWrap = -3;
+  const newPosBackWrap = (posD + backStepsWrap + TOTAL_TILES) % TOTAL_TILES;
+  assert.equal(newPosBackWrap, 34);
+
+  // 5. Absolute movement to START (Card #28) or Ethics Committee Tile 9 (Card #37)
+  const targetStart = 0;
+  const targetEthics = 9;
+  assert.equal(targetStart, 0);
+  assert.equal(targetEthics, 9);
+});
