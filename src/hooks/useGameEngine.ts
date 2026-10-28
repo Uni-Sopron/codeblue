@@ -88,7 +88,7 @@ const createInitialState = (): GameState => ({
 export function useGameEngine() {
   const [gameState, setGameState] = useState<GameState>(createInitialState);
   const [hasRolledThisTurn, setHasRolledThisTurn] = useState<boolean>(false);
-  const [hasBuiltThisTurn, setHasBuiltThisTurn] = useState<boolean>(false);
+  const hasBuiltThisTurn = Boolean(gameState.builtThisTurn);
   const [extraRollAvailable, setExtraRollAvailable] = useState<boolean>(false);
 
   // Aktuális soron lévő játékos
@@ -205,10 +205,10 @@ export function useGameEngine() {
           },
         ],
         roundPassBonusGranted: false,
+        builtThisTurn: false,
       });
 
       setHasRolledThisTurn(false);
-      setHasBuiltThisTurn(false);
       setExtraRollAvailable(false);
     },
     [],
@@ -859,9 +859,11 @@ export function useGameEngine() {
 
       setGameState((prev) => {
         const currentP = prev.players[prev.activePlayerIndex];
-        if (!currentP) return prev;
+        if (!currentP || prev.phase !== 'building' || prev.isRolling || prev.winner || prev.builtThisTurn) return prev;
 
         const elem = getClinicElementById(elementId)!;
+        if (currentP.builtElements.includes(elementId) || currentP.cash < check.finalCost
+          || (elem.prerequisiteId && !currentP.builtElements.includes(elem.prerequisiteId))) return prev;
         const remainingBuffs = currentP.activeBuffs.filter((b) => b.type !== 'building_discount');
 
         const updatedPlayer: Player = {
@@ -879,6 +881,7 @@ export function useGameEngine() {
         return {
           ...prev,
           players: updatedPlayers,
+          builtThisTurn: true,
           logs: [
             {
               id: createLogId(),
@@ -893,7 +896,6 @@ export function useGameEngine() {
         };
       });
 
-      setHasBuiltThisTurn(true);
       return true;
     },
     [canBuyElement, addLog],
@@ -1021,12 +1023,12 @@ export function useGameEngine() {
         diceResult: null,
         drawnCard: null,
         roundPassBonusGranted: false,
+        builtThisTurn: false,
         logs: [...skipLogs, ...prev.logs],
       };
     });
 
     setHasRolledThisTurn(false);
-    setHasBuiltThisTurn(false);
     setExtraRollAvailable(false);
   }, [checkVictoryConditions]);
 
@@ -1036,7 +1038,6 @@ export function useGameEngine() {
   const resetGame = useCallback(() => {
     setGameState(createInitialState());
     setHasRolledThisTurn(false);
-    setHasBuiltThisTurn(false);
     setExtraRollAvailable(false);
   }, []);
 
@@ -1053,6 +1054,7 @@ export function useGameEngine() {
         builtElements: [],
         skipTurns: 0,
         activeBuffs: [],
+        bank: getBankBalances(null),
       }));
       return {
         ...prev,
@@ -1067,6 +1069,7 @@ export function useGameEngine() {
         discardDeck: [],
         winner: null,
         roundPassBonusGranted: false,
+        builtThisTurn: false,
         logs: [
           ...prev.logs,
           {
@@ -1079,7 +1082,6 @@ export function useGameEngine() {
       };
     });
     setHasRolledThisTurn(false);
-    setHasBuiltThisTurn(false);
     setExtraRollAvailable(false);
   }, []);
 
@@ -1109,12 +1111,12 @@ export function useGameEngine() {
       const resolved = typeof newStateOrUpdater === 'function' ? newStateOrUpdater(prev) : newStateOrUpdater;
       const normalizedState: GameState = {
         ...resolved,
+        builtThisTurn: Boolean(resolved.builtThisTurn),
         players: resolved.players.map((player) => ({ ...player, bank: getBankBalances(player) })),
         winner: resolved.winner ? { ...resolved.winner, bank: getBankBalances(resolved.winner) } : null,
       };
       if (normalizedState.phase === 'roll') {
         setHasRolledThisTurn(false);
-        setHasBuiltThisTurn(false);
         setExtraRollAvailable(false);
       } else if (normalizedState.phase === 'building' || normalizedState.phase === 'tile_action') {
         setHasRolledThisTurn(true);

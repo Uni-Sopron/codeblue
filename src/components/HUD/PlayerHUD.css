@@ -189,6 +189,21 @@
   gap: 0.4rem;
 }
 
+.player-bot-tag {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-left: 0.2rem;
+  padding: 2px 5px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  border-radius: 5px;
+  background: rgba(14, 165, 233, 0.15);
+  color: #7dd3fc;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
 .player-me-tag {
   background: rgba(16, 185, 129, 0.2);
   color: #34d399;

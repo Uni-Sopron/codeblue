@@ -194,6 +194,7 @@ export interface GameState {
   winner: Player | null;
   logs: GameLog[];
   roundPassBonusGranted: boolean;  // START mező áthaladás egyszeri regisztrációja a lépésben
+  builtThisTurn?: boolean;
 }
 
 // ==========================================

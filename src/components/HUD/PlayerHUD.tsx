@@ -37,6 +37,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
           <span className="hud-turn-badge">Kör: #{turnNumber}</span>
           <span className="hud-active-callout">
             Soron lévő orvos: <strong>{activePlayer ? activePlayer.name : '-'}</strong>
+            {activePlayer?.isAI && <span className="player-bot-tag">[BOT]</span>}
           </span>
         </div>
 
@@ -91,6 +92,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                 <div className="player-identity">
                   <div className="player-name-row">
                     <h4 className="player-name">{player.name}</h4>
+                    {player.isAI && <span className="player-bot-tag">[BOT]</span>}
                     {isMe && <span className="player-me-tag">Te</span>}
                   </div>
                   <p className="player-role">{avatarInfo?.title || player.avatarTitle}</p>

@@ -10,12 +10,17 @@ import {
   ArrowLeft,
   Wifi,
   Menu,
+  Bot,
+  Pause,
 } from 'lucide-react';
 import { BOARD_TILES } from './data/tiles.ts';
 import { AVATARS } from './data/avatars.ts';
 import { canUseBank } from './utils/bank.ts';
 import { useGameEngine } from './hooks/useGameEngine.ts';
 import { useGameAudio } from './hooks/useGameAudio.ts';
+import { useBotPlayer } from './hooks/useBotPlayer.ts';
+import { createLocalPlayerConfigs } from './data/botProfiles.ts';
+import type { LocalPlayerType } from './data/botProfiles.ts';
 import type { PlayerId, GamePhase, GameState, Player } from './types/game.ts';
 import {
   multiplayerService,
@@ -51,7 +56,7 @@ const PHASE_LABELS: Record<GamePhase, string> = {
 
 export function App() {
   const engine = useGameEngine();
-  const { gameState, activePlayer } = engine;
+  const { gameState, activePlayer, startGame, setFullGameState } = engine;
   const audio = useGameAudio(gameState);
 
   // Modal and panel visibility states
@@ -81,7 +86,10 @@ export function App() {
   // Multiplayer and game mode state
   const [gameMode, setGameMode] = useState<'local' | 'online' | null>(null);
   const [onlineRoom, setOnlineRoom] = useState<MultiplayerRoom | null>(null);
+  const onlineRoomCode = onlineRoom?.code;
   const [myRemotePlayer, setMyRemotePlayer] = useState<RemotePlayer | null>(null);
+  const [onlineSocketId, setOnlineSocketId] = useState<string | null>(null);
+  const [areBotsPaused, setAreBotsPaused] = useState(false);
   const [rematchVotes, setRematchVotes] = useState<Record<string, boolean>>({});
   const [turnTimeoutRemaining, setTurnTimeoutRemaining] = useState<number | null>(null);
   const [toastMessage, setToastMessage] = useState<{ id: number; text: string; type: 'info' | 'warning' | 'success' } | null>(null);
@@ -89,6 +97,7 @@ export function App() {
 
   // Setup state (for local hotseat)
   const [playerCount, setPlayerCount] = useState<number>(4);
+  const [playerTypes, setPlayerTypes] = useState<LocalPlayerType[]>(['human', 'bot', 'bot', 'bot']);
   const [playerNames, setPlayerNames] = useState<string[]>([
     '1. Orvos',
     '2. Orvos',
@@ -98,10 +107,22 @@ export function App() {
 
   // Determine if it is currently my turn
   const isMyTurn = useMemo(() => {
+    if (activePlayer?.isAI) return false;
     if (gameMode !== 'online') return true;
-    if (!myRemotePlayer || !activePlayer) return false;
+    if (!myRemotePlayer || !activePlayer || !onlineSocketId) return false;
     return activePlayer.id === myRemotePlayer.id;
-  }, [gameMode, myRemotePlayer, activePlayer]);
+  }, [gameMode, myRemotePlayer, activePlayer, onlineSocketId]);
+
+  const isOnlineHost = !!onlineSocketId && onlineRoom?.hostSocketId === onlineSocketId;
+  const canDriveBots = gameMode === 'local' || (gameMode === 'online' && isOnlineHost);
+  const botsPaused = areBotsPaused || isGameMenuOpen || isConfirmExitOpen || isRematchPromptOpen
+    || isDevPanelOpen || isBankOpen || isClinicOpen;
+  useBotPlayer(engine, { enabled: canDriveBots, paused: botsPaused });
+
+  const localConfigs = useMemo(
+    () => createLocalPlayerConfigs(playerCount, playerTypes, playerNames),
+    [playerCount, playerTypes, playerNames],
+  );
 
   // Current tile of active player
   const currentTile = useMemo(() => {
@@ -111,14 +132,9 @@ export function App() {
 
   // Handle local game start
   const handleStartGame = () => {
-    const selectedAvatars = AVATARS.slice(0, playerCount);
-    const configs = selectedAvatars.map((avatar, idx) => ({
-      id: `p${idx + 1}` as PlayerId,
-      name: playerNames[idx]?.trim() || `${idx + 1}. Játékos (${avatar.title})`,
-      avatar: avatar.id,
-      color: avatar.color,
-    }));
-    engine.startGame(configs);
+    if (localConfigs.length !== playerCount) return;
+    setAreBotsPaused(false);
+    startGame(localConfigs);
   };
 
   // Handle online game start callback from lobby
@@ -130,27 +146,36 @@ export function App() {
 
       if (startedRoom.gameState) {
         isRemoteUpdateRef.current = true;
-        engine.setFullGameState(startedRoom.gameState);
+        setFullGameState(startedRoom.gameState);
         return;
       }
 
       const configs = startedRoom.players.map((p, idx) => {
         const avatarInfo = AVATARS.find((a) => a.id === p.avatar) || AVATARS[idx % AVATARS.length];
         return {
-          id: `p${idx + 1}` as PlayerId,
+          id: p.id as PlayerId,
           name: p.name,
           avatar: avatarInfo.id,
-          color: avatarInfo.color,
+          color: p.color || avatarInfo.color,
+          isAI: 'isAI' in p && p.isAI === true,
         };
       });
-      engine.startGame(configs);
+      startGame(configs);
     },
-    [engine]
+    [startGame, setFullGameState]
   );
 
   // Socket listeners for game start and state synchronization
   useEffect(() => {
     const socket = multiplayerService.getSocket();
+
+    const handleConnected = () => setOnlineSocketId(socket.id ?? null);
+    const handleDisconnected = () => setOnlineSocketId(null);
+    const handleRoomUpdated = ({ room }: { room: MultiplayerRoom }) => {
+      setOnlineRoom((previous) => previous?.code === room.code ? room : previous);
+      const me = room.players.find((player) => player.socketId === socket.id);
+      if (me) setMyRemotePlayer(me);
+    };
 
     const handleGameStarted = ({
       room: startedRoom,
@@ -165,25 +190,29 @@ export function App() {
       if (me) setMyRemotePlayer(me);
       if (initialGameState) {
         isRemoteUpdateRef.current = true;
-        engine.setFullGameState(initialGameState);
+        setFullGameState(initialGameState);
+      } else if (startedRoom.gameState) {
+        isRemoteUpdateRef.current = true;
+        setFullGameState(startedRoom.gameState);
       } else {
         const configs = startedRoom.players.map((p, idx) => {
           const avatarInfo = AVATARS.find((a) => a.id === p.avatar) || AVATARS[idx % AVATARS.length];
           return {
-            id: `p${idx + 1}` as PlayerId,
+            id: p.id as PlayerId,
             name: p.name,
             avatar: avatarInfo.id,
-            color: avatarInfo.color,
+            color: p.color || avatarInfo.color,
+            isAI: 'isAI' in p && p.isAI === true,
           };
         });
-        engine.startGame(configs);
+        startGame(configs);
       }
     };
 
     const handleRemoteSync = ({ gameState: remoteState }: { gameState: GameState }) => {
       if (remoteState) {
         isRemoteUpdateRef.current = true;
-        engine.setFullGameState(remoteState);
+        setFullGameState(remoteState);
       }
     };
 
@@ -197,7 +226,7 @@ export function App() {
       timeoutSeconds?: number;
     }) => {
       isRemoteUpdateRef.current = true;
-      engine.setFullGameState((prev: GameState) => ({
+      setFullGameState((prev: GameState) => ({
         ...prev,
         players: prev.players.map((p: Player) =>
           p.id === playerId ? { ...p, connected: false } : p
@@ -223,7 +252,7 @@ export function App() {
       playerName: string;
     }) => {
       isRemoteUpdateRef.current = true;
-      engine.setFullGameState((prev: GameState) => ({
+      setFullGameState((prev: GameState) => ({
         ...prev,
         players: prev.players.map((p: Player) =>
           p.id === playerId ? { ...p, connected: true } : p
@@ -295,7 +324,7 @@ export function App() {
       setTurnTimeoutRemaining(null);
       setOnlineRoom(resetRoom);
       isRemoteUpdateRef.current = true;
-      engine.setFullGameState(resetGameState);
+      setFullGameState(resetGameState);
       setToastMessage({
         id: Date.now(),
         text: '🚀 A visszavágó elindult! Új játék kezdődött.',
@@ -312,7 +341,7 @@ export function App() {
       setTurnTimeoutRemaining(null);
       if (updatedState) {
         isRemoteUpdateRef.current = true;
-        engine.setFullGameState(updatedState);
+        setFullGameState(updatedState);
       }
       setToastMessage({
         id: Date.now(),
@@ -329,6 +358,11 @@ export function App() {
       });
     };
 
+    socket.on('connect', handleConnected);
+    socket.on('disconnect', handleDisconnected);
+    socket.on('room:update', handleRoomUpdated);
+    // A kapcsolat egy korábbi lobby-újrarenderelésből már élhet.
+    if (socket.connected) handleConnected();
     socket.on('game:started', handleGameStarted);
     socket.on('game:sync_broadcast', handleRemoteSync);
     socket.on('player:disconnected', handlePlayerDisconnected);
@@ -340,6 +374,9 @@ export function App() {
     socket.on('room:player_left', handlePlayerLeft);
 
     return () => {
+      socket.off('connect', handleConnected);
+      socket.off('disconnect', handleDisconnected);
+      socket.off('room:update', handleRoomUpdated);
       socket.off('game:started', handleGameStarted);
       socket.off('game:sync_broadcast', handleRemoteSync);
       socket.off('player:disconnected', handlePlayerDisconnected);
@@ -350,7 +387,7 @@ export function App() {
       socket.off('turn:auto_passed', handleTurnAutoPassed);
       socket.off('room:player_left', handlePlayerLeft);
     };
-  }, [engine]);
+  }, [startGame, setFullGameState]);
 
   // Sync state to other players when a local player mutates gameState
   useEffect(() => {
@@ -358,10 +395,10 @@ export function App() {
       isRemoteUpdateRef.current = false;
       return;
     }
-    if (gameMode === 'online' && onlineRoom && gameState.phase !== 'setup') {
-      multiplayerService.syncState(onlineRoom.code, gameState);
+    if (gameMode === 'online' && onlineRoomCode && gameState.phase !== 'setup') {
+      multiplayerService.syncState(onlineRoomCode, gameState);
     }
-  }, [gameState, gameMode, onlineRoom]);
+  }, [gameState, gameMode, onlineRoomCode]);
 
   // Turn timeout countdown timer
   useEffect(() => {
@@ -405,6 +442,11 @@ export function App() {
     if (turnTimeoutRemaining !== null && turnTimeoutRemaining > 0) {
       return `⚠️ Játékos kapcsolata megszakadt! Automatikus körátadás ${turnTimeoutRemaining} mp múlva...`;
     }
+    if (activePlayer?.isAI) {
+      return canDriveBots && botsPaused
+        ? 'A bot szünetel.'
+        : `${activePlayer.name} [BOT] gondolkodik…`;
+    }
     if (gameMode === 'online' && !isMyTurn && activePlayer) {
       return `⏳ Várakozás: ${activePlayer.name} orvos köre van folyamatban...`;
     }
@@ -424,7 +466,7 @@ export function App() {
       return 'Eseménykártya felhúzva! Olvasd el a lapot a folytatáshoz.';
     }
     return undefined;
-  }, [turnTimeoutRemaining, gameMode, isMyTurn, gameState.phase, activePlayer, currentTile]);
+  }, [turnTimeoutRemaining, gameMode, isMyTurn, gameState.phase, activePlayer, currentTile, canDriveBots, botsPaused]);
 
   return (
     <div className="app-container">
@@ -464,6 +506,18 @@ export function App() {
         {/* Global Toolbar Buttons */}
         {gameState.phase !== 'setup' && (
           <div className="header-actions">
+            {canDriveBots && gameState.players.some((player) => player.isAI) && (
+              <button
+                type="button"
+                className={`header-btn ${areBotsPaused ? 'btn-active' : ''}`}
+                onClick={() => setAreBotsPaused((previous) => !previous)}
+                aria-pressed={areBotsPaused}
+                title={areBotsPaused ? 'Botok folytatása' : 'Botok szüneteltetése'}
+              >
+                {areBotsPaused ? <Play size={16} /> : <Pause size={16} />}
+                <span>{areBotsPaused ? 'Botok folytatása' : 'Botok szünet'}</span>
+              </button>
+            )}
             <button
               type="button"
               className={`header-btn ${isClinicOpen ? 'btn-active' : ''}`}
@@ -563,35 +617,60 @@ export function App() {
                       key={count}
                       type="button"
                       className={`count-toggle-btn ${playerCount === count ? 'active' : ''}`}
-                      onClick={() => setPlayerCount(count)}
+                      onClick={() => {
+                        setPlayerCount(count);
+                        setPlayerTypes((previous) => previous.slice(0, count).includes('human')
+                          ? previous : previous.map((type, index) => index === 0 ? 'human' : type));
+                      }}
                     >
                       {count} Orvos
                     </button>
                   ))}
                 </div>
+                <p className="setup-bot-help">Legalább egy emberrel, 1–3 bot ellen is játszhatsz.</p>
               </div>
 
               <div className="setup-players-grid">
-                {AVATARS.slice(0, playerCount).map((avatar, idx) => (
+                {localConfigs.map((config, idx) => {
+                  const avatar = AVATARS.find((candidate) => candidate.id === config.avatar)!;
+                  const lastHuman = !config.isAI && playerTypes.slice(0, playerCount).filter((type) => type === 'human').length === 1;
+                  return (
                   <div
-                    key={avatar.id}
-                    className="setup-player-card"
-                    style={{ borderColor: avatar.color }}
+                    key={config.id}
+                    className={`setup-player-card ${config.isAI ? 'setup-player-card--bot' : ''}`}
+                    style={{ borderColor: config.color }}
                   >
                     <img
                       src={avatar.image || '/assets/board_center.jpg'}
-                      alt={avatar.title}
+                      alt={config.name}
                       className="setup-player-avatar"
                       style={{ borderColor: avatar.color }}
                     />
                     <div className="setup-player-info">
+                      <div className="setup-player-type" role="group" aria-label={`${idx + 1}. orvos típusa`}>
+                        {(['human', 'bot'] as const).map((type) => (
+                          <button
+                            key={type}
+                            type="button"
+                            aria-pressed={playerTypes[idx] === type}
+                            disabled={type === 'bot' && lastHuman}
+                            title={type === 'bot' && lastHuman ? 'Legalább egy emberi játékos szükséges.' : undefined}
+                            onClick={() => setPlayerTypes((previous) => previous.map((value, index) => index === idx ? type : value))}
+                          >
+                            {type === 'bot' && <Bot size={13} />}
+                            {type === 'human' ? 'Ember' : 'Bot'}
+                          </button>
+                        ))}
+                      </div>
                       <span className="setup-player-role" style={{ color: avatar.color }}>
-                        {avatar.title} • {avatar.role}
+                        {avatar.title}{config.isAI ? ' · [BOT]' : ''}
                       </span>
                       <input
                         type="text"
                         className="setup-player-name-input"
-                        value={playerNames[idx]}
+                        value={config.isAI ? config.name : playerNames[idx]}
+                        readOnly={config.isAI}
+                        aria-label={`${idx + 1}. orvos neve`}
                         onChange={(e) => {
                           const newNames = [...playerNames];
                           newNames[idx] = e.target.value;
@@ -602,13 +681,14 @@ export function App() {
                       <span className="setup-player-desc">{avatar.description}</span>
                     </div>
                   </div>
-                ))}
+                ); })}
               </div>
 
               <button
                 type="button"
                 className="btn-start-game"
                 onClick={handleStartGame}
+                disabled={localConfigs.length !== playerCount}
               >
                 <Play size={20} />
                 <span>Játék Indítása</span>
@@ -657,11 +737,12 @@ export function App() {
 
               {/* Action Bar Beneath the Board */}
               <div className="board-turn-controls">
-                {!isMyTurn && gameMode === 'online' ? (
+                {!isMyTurn ? (
                   <div className="waiting-turn-badge">
                     <span className="pulse-dot" />
                     <span>
-                      Várakozás: <strong>{activePlayer?.name}</strong> orvos köre van folyamatban...
+                      <strong>{activePlayer?.name}</strong>{activePlayer?.isAI ? ' [BOT]' : ''}
+                      {activePlayer?.isAI && canDriveBots && botsPaused ? ' · A bot szünetel.' : ' orvos köre van folyamatban…'}
                     </span>
                   </div>
                 ) : (
@@ -802,7 +883,7 @@ export function App() {
             setOnlineRoom(null);
             setMyRemotePlayer(null);
           }
-          engine.restartCurrentMatch();
+          engine.resetGame();
           setGameMode(null);
         }}
       />
@@ -812,7 +893,7 @@ export function App() {
         isOpen={isGameMenuOpen}
         onClose={() => setIsGameMenuOpen(false)}
         gameMode={gameMode}
-        isHost={!gameMode || gameMode === 'local' || !!myRemotePlayer?.isHost}
+        isHost={gameMode !== 'online' || isOnlineHost}
         soundEnabled={audio.soundEnabled}
         onToggleSound={() => audio.setSoundEnabled(!audio.soundEnabled)}
         onOpenDevPanel={() => setIsDevPanelOpen(true)}
@@ -871,7 +952,7 @@ export function App() {
         isOpen={isConfirmExitOpen}
         onClose={() => setIsConfirmExitOpen(false)}
         gameMode={gameMode}
-        isHost={!!myRemotePlayer?.isHost}
+        isHost={isOnlineHost}
         onConfirmExit={() => {
           if (gameMode === 'online' && onlineRoom) {
             multiplayerService.leaveRoom(onlineRoom.code);
