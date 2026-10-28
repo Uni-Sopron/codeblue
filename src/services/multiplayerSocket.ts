@@ -122,6 +122,8 @@ class MultiplayerSocketService {
         this.currentRoom = room;
         this.myPlayer = room.players.find((p) => p.id === this.myPlayer?.id) || null;
       });
+    } else if (!this.socket.active) {
+      this.socket.connect();
     }
     return this.socket;
   }
@@ -146,6 +148,12 @@ class MultiplayerSocketService {
   public joinRoom(roomCode: string, playerName: string, avatarId: string, color: string, pin?: string): Promise<RoomResponse> {
     return this.request('room:join', { roomCode, playerName, avatarId, color, pin });
   }
+  public addBot(roomCode: string): Promise<RoomResponse> {
+    return this.request('room:add_bot', { roomCode });
+  }
+  public removeBot(roomCode: string, playerId: string): Promise<RoomResponse> {
+    return this.request('room:remove_bot', { roomCode, playerId });
+  }
   public startGame(roomCode: string, initialGameState?: GameState): Promise<RoomResponse> {
     return this.request('room:start', { roomCode, initialGameState });
   }
@@ -168,7 +176,6 @@ class MultiplayerSocketService {
     this.currentRoom = null;
     this.myPlayer = null;
     this.socket?.disconnect();
-    this.socket = null;
     this.latestRooms = [];
   }
 }

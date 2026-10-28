@@ -352,6 +352,58 @@
   flex-direction: column;
   gap: 4px;
   flex: 1;
+  min-width: 0;
+}
+
+.setup-bot-help {
+  margin: 2px 0 0;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.setup-player-type {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+
+.setup-player-type button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 1;
+  border: 1px solid #334155;
+  border-radius: 7px;
+  background: #0f172a;
+  padding: 6px 10px;
+  color: #94a3b8;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.setup-player-type button[aria-pressed="true"] {
+  border-color: #38bdf8;
+  background: rgba(14, 165, 233, 0.16);
+  color: #e0f2fe;
+}
+
+.setup-player-type button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.setup-player-type button:focus-visible {
+  outline: 2px solid #7dd3fc;
+  outline-offset: 2px;
+}
+
+.setup-player-name-input[readonly] {
+  border-style: dashed;
+  color: #bae6fd;
 }
 
 .setup-player-role {

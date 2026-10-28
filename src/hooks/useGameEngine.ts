@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type {
   GameState,
   Player,
@@ -88,8 +88,14 @@ const createInitialState = (): GameState => ({
 export function useGameEngine() {
   const [gameState, setGameState] = useState<GameState>(createInitialState);
   const [hasRolledThisTurn, setHasRolledThisTurn] = useState<boolean>(false);
-  const [hasBuiltThisTurn, setHasBuiltThisTurn] = useState<boolean>(false);
+  const hasBuiltThisTurn = Boolean(gameState.builtThisTurn);
   const [extraRollAvailable, setExtraRollAvailable] = useState<boolean>(false);
+  const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelPendingRoll = useCallback(() => {
+    if (rollTimer.current !== null) clearTimeout(rollTimer.current);
+    rollTimer.current = null;
+  }, []);
+  useEffect(() => cancelPendingRoll, [cancelPendingRoll]);
 
   // Aktuális soron lévő játékos
   const activePlayer = useMemo<Player | null>(() => {
@@ -163,6 +169,7 @@ export function useGameEngine() {
       if (configs.length < GAME_CONSTANTS.MIN_PLAYERS || configs.length > GAME_CONSTANTS.MAX_PLAYERS) {
         throw new Error(`A játékosok száma ${GAME_CONSTANTS.MIN_PLAYERS} és ${GAME_CONSTANTS.MAX_PLAYERS} között kell legyen!`);
       }
+      cancelPendingRoll();
 
       const initialPlayers: Player[] = configs.map((cfg) => {
         const avatarInfo = AVATARS.find((a) => a.id === cfg.avatar) ?? AVATARS[0];
@@ -205,13 +212,13 @@ export function useGameEngine() {
           },
         ],
         roundPassBonusGranted: false,
+        builtThisTurn: false,
       });
 
       setHasRolledThisTurn(false);
-      setHasBuiltThisTurn(false);
       setExtraRollAvailable(false);
     },
-    [],
+    [cancelPendingRoll],
   );
 
   /**
@@ -221,6 +228,7 @@ export function useGameEngine() {
    * - START mező áthaladáskor +300 000 KK
    */
   const rollDice = useCallback(() => {
+    if (rollTimer.current !== null) return;
     if (!activePlayer) return;
     if (gameState.phase !== 'roll') return;
     if (gameState.isRolling || gameState.winner) return;
@@ -232,7 +240,8 @@ export function useGameEngine() {
     setGameState((prev) => ({ ...prev, isRolling: true }));
 
     // Rövid vizuális időzítés után léptetés
-    setTimeout(() => {
+    rollTimer.current = setTimeout(() => {
+      rollTimer.current = null;
       setGameState((prev) => {
         const currentP = prev.players[prev.activePlayerIndex];
         if (!currentP || prev.phase !== 'roll' || !prev.isRolling) return prev;
@@ -859,9 +868,11 @@ export function useGameEngine() {
 
       setGameState((prev) => {
         const currentP = prev.players[prev.activePlayerIndex];
-        if (!currentP) return prev;
+        if (!currentP || prev.phase !== 'building' || prev.isRolling || prev.winner || prev.builtThisTurn) return prev;
 
         const elem = getClinicElementById(elementId)!;
+        if (currentP.builtElements.includes(elementId) || currentP.cash < check.finalCost
+          || (elem.prerequisiteId && !currentP.builtElements.includes(elem.prerequisiteId))) return prev;
         const remainingBuffs = currentP.activeBuffs.filter((b) => b.type !== 'building_discount');
 
         const updatedPlayer: Player = {
@@ -879,6 +890,7 @@ export function useGameEngine() {
         return {
           ...prev,
           players: updatedPlayers,
+          builtThisTurn: true,
           logs: [
             {
               id: createLogId(),
@@ -893,7 +905,6 @@ export function useGameEngine() {
         };
       });
 
-      setHasBuiltThisTurn(true);
       return true;
     },
     [canBuyElement, addLog],
@@ -1021,12 +1032,12 @@ export function useGameEngine() {
         diceResult: null,
         drawnCard: null,
         roundPassBonusGranted: false,
+        builtThisTurn: false,
         logs: [...skipLogs, ...prev.logs],
       };
     });
 
     setHasRolledThisTurn(false);
-    setHasBuiltThisTurn(false);
     setExtraRollAvailable(false);
   }, [checkVictoryConditions]);
 
@@ -1034,16 +1045,17 @@ export function useGameEngine() {
    * 9. Játék újraindítása
    */
   const resetGame = useCallback(() => {
+    cancelPendingRoll();
     setGameState(createInitialState());
     setHasRolledThisTurn(false);
-    setHasBuiltThisTurn(false);
     setExtraRollAvailable(false);
-  }, []);
+  }, [cancelPendingRoll]);
 
   /**
    * 9.1 Meccs újraindítása helyben a táblán (orvosok megtartásával, főmenübe lépés nélkül)
    */
   const restartCurrentMatch = useCallback(() => {
+    cancelPendingRoll();
     setGameState((prev) => {
       const freshPlayers = prev.players.map((p) => ({
         ...p,
@@ -1053,6 +1065,7 @@ export function useGameEngine() {
         builtElements: [],
         skipTurns: 0,
         activeBuffs: [],
+        bank: getBankBalances(null),
       }));
       return {
         ...prev,
@@ -1067,6 +1080,7 @@ export function useGameEngine() {
         discardDeck: [],
         winner: null,
         roundPassBonusGranted: false,
+        builtThisTurn: false,
         logs: [
           ...prev.logs,
           {
@@ -1079,9 +1093,8 @@ export function useGameEngine() {
       };
     });
     setHasRolledThisTurn(false);
-    setHasBuiltThisTurn(false);
     setExtraRollAvailable(false);
-  }, []);
+  }, [cancelPendingRoll]);
 
   // Explicit debug API keeps the panel on the same state as the real game.
   const dispatchDevAction = useCallback((action: DevAction) => {
@@ -1105,23 +1118,24 @@ export function useGameEngine() {
   }, [dispatchDevAction]);
 
   const setFullGameState = useCallback((newStateOrUpdater: GameState | ((prev: GameState) => GameState)) => {
+    if (typeof newStateOrUpdater !== 'function' && !newStateOrUpdater.isRolling) cancelPendingRoll();
     setGameState((prev) => {
       const resolved = typeof newStateOrUpdater === 'function' ? newStateOrUpdater(prev) : newStateOrUpdater;
       const normalizedState: GameState = {
         ...resolved,
+        builtThisTurn: Boolean(resolved.builtThisTurn),
         players: resolved.players.map((player) => ({ ...player, bank: getBankBalances(player) })),
         winner: resolved.winner ? { ...resolved.winner, bank: getBankBalances(resolved.winner) } : null,
       };
       if (normalizedState.phase === 'roll') {
         setHasRolledThisTurn(false);
-        setHasBuiltThisTurn(false);
         setExtraRollAvailable(false);
       } else if (normalizedState.phase === 'building' || normalizedState.phase === 'tile_action') {
         setHasRolledThisTurn(true);
       }
       return normalizedState;
     });
-  }, []);
+  }, [cancelPendingRoll]);
 
   return {
     gameState,

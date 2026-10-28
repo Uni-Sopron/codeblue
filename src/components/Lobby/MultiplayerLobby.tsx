@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { ArrowLeft, Check, Copy, Globe2, LockKeyhole, Play, Plus, Users, Wifi } from 'lucide-react';
+import { ArrowLeft, Bot, Check, Copy, Globe2, LockKeyhole, Play, Plus, Trash2, Users, Wifi } from 'lucide-react';
 import { AVATARS } from '../../data/avatars.ts';
 import {
   multiplayerService,
@@ -216,6 +216,24 @@ export function MultiplayerLobby({ onStartLocalGame, onStartOnlineGame }: Multip
     }
   };
 
+  const changeBot = async (playerId?: string) => {
+    if (!room || !myPlayer?.isHost || requestPending.current) return;
+    requestPending.current = true;
+    setIsConnecting(true);
+    setErrorMsg(null);
+    try {
+      const result = playerId
+        ? await multiplayerService.removeBot(room.code, playerId)
+        : await multiplayerService.addBot(room.code);
+      if (!result.success) setErrorMsg(result.error || 'A bot nem módosítható.');
+    } catch {
+      setErrorMsg('A bot nem módosítható. Próbáld újra.');
+    } finally {
+      requestPending.current = false;
+      setIsConnecting(false);
+    }
+  };
+
   const profile = <LobbyProfile playerName={playerName} avatarId={selectedAvatarId} disabled={isConnecting} onNameChange={setPlayerName} onAvatarChange={setSelectedAvatarId} />;
 
   return (
@@ -252,11 +270,13 @@ export function MultiplayerLobby({ onStartLocalGame, onStartOnlineGame }: Multip
                 return player ? (
                   <div className="lobby-slot" key={player.id}>
                     <img src={avatar.image} alt="" width="48" height="48" />
-                    <div><strong>{player.name}{player.id === myPlayer?.id ? ' (Te)' : ''}</strong><span>{player.isHost ? 'Szobagazda' : avatar.title}{!player.connected ? ' · Kapcsolat megszakadt' : ''}</span></div>
+                    <div><strong>{player.name}{player.id === myPlayer?.id ? ' (Te)' : ''}{player.isAI && <span className="lobby-bot-badge">[BOT]</span>}</strong><span>{player.isHost ? 'Szobagazda' : avatar.title}{!player.connected ? ' · Kapcsolat megszakadt' : ''}</span></div>
+                    {myPlayer?.isHost && player.isAI && <button type="button" className="lobby-icon-button lobby-remove-bot" aria-label={`${player.name} eltávolítása`} disabled={isConnecting} onClick={() => void changeBot(player.id)}><Trash2 aria-hidden="true" /></button>}
                   </div>
                 ) : <div className="lobby-slot lobby-slot--empty" key={`empty-${index}`}><Users aria-hidden="true" /><span>Szabad hely</span></div>;
               })}
             </div>
+            {myPlayer?.isHost && room.players.length < 4 && <button className="lobby-secondary lobby-add-bot" type="button" disabled={isConnecting} onClick={() => void changeBot()}><Bot aria-hidden="true" />Bot hozzáadása</button>}
             {errorMsg && <p className="lobby-form-error" role="alert">{errorMsg}</p>}
             <div className="lobby-form-actions">
               {myPlayer?.isHost ? <button className="lobby-primary" type="button" disabled={isConnecting || room.players.length < 2} onClick={() => void handleHostStartGame()}><Play aria-hidden="true" />{room.players.length < 2 ? 'Legalább 2 játékos szükséges' : isConnecting ? 'Indítás…' : `Játék indítása (${room.players.length} fő)`}</button>
