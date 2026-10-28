@@ -424,7 +424,7 @@ export function App() {
     engine.rollDice();
   }, [gameState.phase, gameState.isRolling, isMyTurn, engine]);
 
-  // Keyboard shortcut: Unified Space primary loop (Roll -> Confirm Card -> End Turn)
+  // Keyboard shortcut: Unified E & Enter primary action loop (Roll -> Confirm Card -> End Turn)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
@@ -438,7 +438,13 @@ export function App() {
         return;
       }
 
-      if (e.code === 'Space' && isMyTurn) {
+      // Prevent Space scrolling the page during gameplay
+      if (e.code === 'Space') {
+        e.preventDefault();
+      }
+
+      const isActionKey = e.code === 'KeyE' || e.key === 'e' || e.key === 'E' || e.code === 'Enter';
+      if (isActionKey && isMyTurn) {
         if (gameState.phase === 'roll' && !gameState.isRolling) {
           e.preventDefault();
           handleRollDice();
@@ -479,7 +485,7 @@ export function App() {
       return `⏳ Várakozás: ${activePlayer.name} orvos köre van folyamatban...`;
     }
     if (gameState.phase === 'roll') {
-      return `${activePlayer?.name ?? 'Játékos'}: Dobj a kockával a lépéshez! (Space vagy kattintás)`;
+      return `${activePlayer?.name ?? 'Játékos'}: Dobj a kockával a lépéshez! (E vagy Enter, vagy kattintás)`;
     }
     if (gameState.phase === 'moving') {
       return 'Bábu haladása a táblán...';
@@ -488,10 +494,10 @@ export function App() {
       return `Érkezés: ${currentTile.name} – Kattints a mező eseményének jóváhagyásához!`;
     }
     if (gameState.phase === 'building') {
-      return 'Építkezési lehetőség! Vásárolj új részleget a klinikádhoz vagy fejezd be a köröd (Space)!';
+      return 'Építkezési lehetőség! Vásárolj új részleget a klinikádhoz vagy fejezd be a köröd (E billentyű)!';
     }
     if (gameState.phase === 'card_modal') {
-      return 'Eseménykártya felhúzva! Olvasd el a lapot a folytatáshoz (Space vagy jóváhagyás).';
+      return 'Eseménykártya felhúzva! Olvasd el a lapot a folytatáshoz (E vagy jóváhagyás).';
     }
     return undefined;
   }, [turnTimeoutRemaining, gameMode, isMyTurn, gameState.phase, activePlayer, currentTile, canDriveBots, botsPaused]);
@@ -826,11 +832,11 @@ export function App() {
                           type="button"
                           className="action-btn-primary action-btn-end-turn"
                           onClick={engine.endTurn}
-                          title="Kör Befejezése (Space billentyű vagy kattintás)"
+                          title="Kör Befejezése (E billentyű vagy kattintás)"
                         >
                           <span>Kör Befejezése</span>
                           <ArrowRight size={18} />
-                          <kbd className="space-key-hint">Space</kbd>
+                          <kbd className="space-key-hint" title="E vagy Enter gomb">E</kbd>
                         </button>
                       </div>
                     )}
@@ -841,11 +847,11 @@ export function App() {
                         className="action-btn-primary action-btn-roll"
                         onClick={handleRollDice}
                         disabled={gameState.isRolling || !isMyTurn}
-                        title="Kockadobás a lépéshez (Space billentyű vagy kattintás)"
+                        title="Kockadobás a lépéshez (E billentyű vagy kattintás)"
                       >
                         <Play size={18} />
                         <span>{gameState.isRolling ? 'Kockadobás...' : 'Kockadobás'}</span>
-                        <kbd className="space-key-hint">Space</kbd>
+                        <kbd className="space-key-hint" title="E vagy Enter gomb">E</kbd>
                       </button>
                     )}
                   </>

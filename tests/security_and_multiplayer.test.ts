@@ -311,13 +311,13 @@ test('Landing on card tiles auto-resolves directly to card_modal phase', () => {
   assert.equal(cardDeck.length, 2);
 });
 
-test('Unified Space key state-machine: roll -> card_modal -> building -> end turn', () => {
+test('Unified E / Enter action key state-machine: roll -> card_modal -> building -> end turn', () => {
   let phase: 'roll' | 'card_modal' | 'building' = 'roll';
   let rolled = false;
   let cardConfirmed = false;
   let turnEnded = false;
 
-  const handleSpace = (currentPhase: 'roll' | 'card_modal' | 'building', isRepeat: boolean) => {
+  const handleActionKey = (currentPhase: 'roll' | 'card_modal' | 'building', isRepeat: boolean) => {
     if (isRepeat) return currentPhase;
     if (currentPhase === 'roll') {
       rolled = true;
@@ -335,22 +335,22 @@ test('Unified Space key state-machine: roll -> card_modal -> building -> end tur
   };
 
   // 1. Repeating key presses are ignored
-  phase = handleSpace(phase, true);
+  phase = handleActionKey(phase, true);
   assert.equal(phase, 'roll');
   assert.equal(rolled, false);
 
-  // 2. Space rolls dice
-  phase = handleSpace(phase, false);
+  // 2. Action key E rolls dice
+  phase = handleActionKey(phase, false);
   assert.equal(phase, 'card_modal');
   assert.equal(rolled, true);
 
-  // 3. Space confirms card
-  phase = handleSpace(phase, false);
+  // 3. Action key E confirms card
+  phase = handleActionKey(phase, false);
   assert.equal(phase, 'building');
   assert.equal(cardConfirmed, true);
 
-  // 4. Space ends turn
-  phase = handleSpace(phase, false);
+  // 4. Action key E ends turn
+  phase = handleActionKey(phase, false);
   assert.equal(phase, 'roll');
   assert.equal(turnEnded, true);
 });

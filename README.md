@@ -209,7 +209,7 @@ A játék felhasználói felülete asztali gépen, tableten és okostelefonon is
 - **Szigorúan Egy Helyben Forgó 3D Kártyák:** A kártyamegjelenítés zárt dobozmodellt (`box-sizing: border-box`) és geometriai középponti forgástengelyt kapott, így mind az asztali nézetben, mind a legkeskenyebb okostelefonokon tökéletesen a saját tengelye körül fordul meg, nulla oldalirányú csúszással vagy kitakarással.
 - **Határon Belül Maradó Bábuk:** A bábuk mobilos méretezése és finomított lebegő animációja garantálja, hogy a START mezőn álló 4 bábu sem lóg ki a játéktábla széléről.
 - **Kristálytiszta Mezőszámok (0..35):** Minden mező sorszáma tiszta fehér színt, erős kontrasztos sötét árnyékot és kiemelt rétegrendet (`z-index: 20`) kapott.
-- **Egygombos Space Irányítás:** Asztali gépen a billentyűzet `Space` gombjával a teljes játékfolyamat vezérelhető: Kockadobás ➔ Kártya jóváhagyása ➔ Kör befejezése.
+- **Egygombos Gyorsirányítás (E / Enter):** Asztali gépen a játékiparban elterjedt `E` (vagy `Enter`) billentyűvel a teljes folyamat kézreállóan vezérelhető (Kockadobás ➔ Kártya jóváhagyása ➔ Kör befejezése), anélkül hogy a szóköz véletlen lefelé görgetné az oldalt.
 
 ---
 

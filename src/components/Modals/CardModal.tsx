@@ -60,12 +60,13 @@ export const CardModal: React.FC<CardModalProps> = ({ card, isOpen, onConfirm })
   }, [isOpen, card]);
 
 
-  // Space vagy Enter billentyűvel a kártya jóváhagyása és folytatás
+  // E vagy Enter billentyűvel a kártya jóváhagyása és folytatás
   useEffect(() => {
     if (!isOpen || !card) return;
     const handleModalKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
-      if (e.code === 'Space' || e.code === 'Enter') {
+      const isActionKey = e.code === 'KeyE' || e.key === 'e' || e.key === 'E' || e.code === 'Enter';
+      if (isActionKey) {
         if (e.target instanceof HTMLElement && e.target.closest('input, textarea, select')) return;
         e.preventDefault();
         onConfirm();
@@ -135,11 +136,11 @@ export const CardModal: React.FC<CardModalProps> = ({ card, isOpen, onConfirm })
                     e.stopPropagation();
                     onConfirm();
                   }}
-                  title="Végrehajtás és folytatás (Space vagy kattintás)"
+                  title="Végrehajtás és folytatás (E billentyű vagy kattintás)"
                 >
                   <Check className="w-4 h-4" />
                   <span>Végrehajtás & Folytatás</span>
-                  <kbd className="space-key-hint">Space</kbd>
+                  <kbd className="space-key-hint" title="E vagy Enter gomb">E</kbd>
                 </button>
               </div>
             </div>
