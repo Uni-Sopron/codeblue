@@ -263,3 +263,15 @@ test('Outside sockets cannot replace state or start/rematch a room by guessing i
   await new Promise((resolve) => setTimeout(resolve, 60));
   assert.deepEqual(broadcasts, []);
 });
+
+test('Server strictly enforces maxRooms limit and returns SERVER_FULL', async (t) => {
+  const { connect } = await setup(t, { maxRooms: 1 });
+  const host1 = await connect();
+  const host2 = await connect();
+  const created1 = await request(host1, 'room:create', avatar);
+  assert.equal(created1.success, true);
+  const created2 = await request(host2, 'room:create', avatar);
+  assert.equal(created2.success, false);
+  assert.equal(created2.errorCode, 'SERVER_FULL');
+  assert.match(created2.error as string, /maximális szobaszámot/);
+});

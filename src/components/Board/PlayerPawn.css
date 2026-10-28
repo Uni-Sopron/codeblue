@@ -12,6 +12,13 @@
   z-index: 5;
 }
 
+
+.pawn-xs {
+  width: 16px;
+  height: 16px;
+  border-width: 1px;
+}
+
 .pawn-sm {
   width: 20px;
   height: 20px;
@@ -85,5 +92,29 @@
   100% {
     transform: scale(1.6);
     opacity: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .pawn-xs {
+    width: 11px;
+    height: 11px;
+    border-width: 1px;
+  }
+  .pawn-sm {
+    width: 14px;
+    height: 14px;
+    border-width: 1px;
+  }
+  .pawn-md {
+    width: 18px;
+    height: 18px;
+    border-width: 1.5px;
+  }
+  .pawn-active {
+    transform: scale(1.08) translateY(-1px);
+  }
+  .pawn-pulse-ring {
+    inset: -3px;
   }
 }

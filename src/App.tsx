@@ -756,7 +756,7 @@ export function App() {
                   (engine.hasRolledThisTurn && !engine.extraRollAvailable && !gameState.extraRollAvailable)
                 }
                 onTileClick={(tile) => {
-                  if (activePlayer && isMyTurn) {
+                  if (isDevPanelOpen && activePlayer && isMyTurn) {
                     engine.devTeleport(activePlayer.id, tile.id);
                   }
                 }}

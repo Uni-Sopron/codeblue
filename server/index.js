@@ -42,7 +42,7 @@ export function createInitialGameState(players) {
   };
 }
 
-export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000, roomTtlMs = 3 * 60 * 60 * 1000 } = {}) {
+export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000, roomTtlMs = 3 * 60 * 60 * 1000, maxRooms = parseInt(process.env.MAX_ROOMS || '50', 10) } = {}) {
   const app = express();
   app.use(cors({ origin: '*' }));
   app.use(express.json({ limit: '256kb' }));
@@ -109,7 +109,7 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
     if (changed) publishDirectory();
   }, 30 * 60 * 1000);
   gc.unref();
-  app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'codeblue-multiplayer', activeRooms: rooms.size, timestamp: new Date(now()).toISOString() }));
+  app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'codeblue-multiplayer', activeRooms: rooms.size, maxRooms, timestamp: new Date(now()).toISOString() }));
   app.get('/rooms', (_req, res) => res.json({ rooms: publicRooms() }));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/socket.io')) return next();
@@ -158,7 +158,7 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
       const { playerName, avatarId, color, name, visibility = 'public', pin = '' } = data || {};
       if (visibility !== 'public' && visibility !== 'private') return fail(callback, 'Érvénytelen láthatóság.', 'INVALID_VISIBILITY');
       if (typeof pin !== 'string' || (pin !== '' && !/^\d{4}$/.test(pin))) return fail(callback, 'A PIN pontosan 4 számjegy legyen.', 'INVALID_PIN');
-      if (rooms.size >= 9000) return fail(callback, 'A szerver megtelt.', 'SERVER_FULL');
+      if (rooms.size >= maxRooms) return fail(callback, `A szerver elérte a maximális szobaszámot (${maxRooms} szoba).`, 'SERVER_FULL');
       let code;
       do { code = `CB-${randomInt(1000, 10000)}`; } while (rooms.has(code));
       const hostName = sanitizeName(playerName, '1. Orvos');

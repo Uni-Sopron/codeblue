@@ -6,7 +6,7 @@ import './PlayerPawn.css';
 interface PlayerPawnProps {
   player: Player;
   isCurrentTurn?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   className?: string;
 }
 

@@ -118,31 +118,38 @@
 .tile-pawns-container {
   position: absolute;
   bottom: 2px;
+  left: 2px;
   right: 2px;
   display: flex;
   flex-wrap: wrap;
   gap: 2px;
   align-items: center;
-  justify-content: flex-end;
-  max-width: 55px;
+  justify-content: center;
+  max-width: 100%;
   pointer-events: none;
   z-index: 10;
+  box-sizing: border-box;
 }
 
 .pawns-count-1 {
-  bottom: 2px;
-  right: 2px;
+  justify-content: flex-end;
 }
 
 .pawns-count-2 {
-  gap: 3px;
+  justify-content: center;
+  gap: 2px;
 }
 
 .pawns-count-3,
 .pawns-count-4 {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 2px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5px;
+  justify-items: center;
+  align-items: center;
+  margin: 0 auto;
+  width: fit-content;
+  max-width: 100%;
 }
 
 /* Target Tile Highlight */

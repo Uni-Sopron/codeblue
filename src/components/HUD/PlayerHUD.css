@@ -305,13 +305,80 @@
 }
 
 @media (max-width: 900px) {
+  .player-hud-container {
+    padding: 0.5rem 0.75rem;
+  }
+  .players-cards-grid {
+    gap: 0.4rem;
+  }
+  .player-card {
+    padding: 0.4rem 0.5rem;
+  }
   .player-stats-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 0.25rem;
+    padding: 0.25rem 0.3rem;
   }
 }
 
 @media (max-width: 640px) {
+  .player-hud-container {
+    padding: 0.4rem 0.5rem;
+    gap: 0.35rem;
+    border-radius: 10px;
+  }
+  .hud-top-bar {
+    padding-bottom: 0.25rem;
+    gap: 0.3rem;
+  }
+  .hud-turn-badge {
+    font-size: 0.72rem;
+    padding: 0.15rem 0.5rem;
+  }
+  .hud-active-callout {
+    font-size: 0.78rem;
+  }
+  .btn-open-bank {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+  }
   .players-cards-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.4rem;
+  }
+  .player-card {
+    padding: 0.35rem 0.45rem;
+    gap: 0.25rem;
+    border-radius: 10px;
+  }
+  .player-header {
+    gap: 0.4rem;
+  }
+  .player-avatar-circle {
+    width: 28px;
+    height: 28px;
+  }
+  .player-name {
+    font-size: 0.8rem;
+  }
+  .player-role {
+    font-size: 0.65rem;
+  }
+  .player-active-tag {
+    font-size: 0.55rem;
+    padding: 0.1rem 0.35rem;
+    top: -6px;
+    right: 6px;
+  }
+  .player-stats-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 0.2rem;
+    padding: 0.2rem 0.25rem;
+  }
+  .stat-label {
+    font-size: 0.55rem;
+  }
+  .stat-value {
+    font-size: 0.7rem;
   }
 }

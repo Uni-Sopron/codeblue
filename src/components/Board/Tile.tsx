@@ -93,7 +93,7 @@ export const Tile: React.FC<TileProps> = ({
               key={pawn.id}
               player={pawn}
               isCurrentTurn={pawn.id === activePlayerId}
-              size={pawns.length > 2 ? 'sm' : 'md'}
+              size={pawns.length >= 3 ? 'xs' : pawns.length === 2 ? 'sm' : 'md'}
             />
           ))}
         </div>

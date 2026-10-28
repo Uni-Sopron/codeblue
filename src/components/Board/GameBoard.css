@@ -340,35 +340,54 @@
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
+  .game-board-wrapper {
+    padding: 0;
+    max-width: 100%;
+  }
   .game-board-grid {
-    gap: 3px;
-    padding: 6px;
+    gap: 2px;
+    padding: 4px;
+    max-height: min(85vw, 420px);
+    max-width: min(85vw, 420px);
+    border-radius: 12px;
   }
-  .center-turn-card {
-    padding: 4px 8px;
-    gap: 6px;
-  }
-  .turn-card-avatar {
-    width: 32px;
-    height: 32px;
-  }
-  .landing-tile-title {
-    font-size: 0.85rem;
-  }
-  .landing-tile-desc {
-    font-size: 0.7rem;
-  }
-}
-@media (max-width: 768px) {
   .board-center-area {
+    margin: 2px;
+    border-radius: 10px;
     backdrop-filter: none !important;
   }
+  .center-turn-card {
+    padding: 2px 6px;
+    gap: 4px;
+    border-radius: 8px;
+    backdrop-filter: none !important;
+    background: rgba(15, 23, 42, 0.92) !important;
+  }
+  .turn-card-avatar {
+    width: 26px;
+    height: 26px;
+  }
+  .turn-card-name {
+    font-size: 0.78rem;
+  }
+  .turn-card-meta {
+    font-size: 0.65rem;
+  }
   .center-landing-card {
+    padding: 4px 8px;
+    gap: 2px;
     backdrop-filter: none !important;
     background: rgba(15, 23, 42, 0.96) !important;
   }
-  .center-turn-card {
-    backdrop-filter: none !important;
-    background: rgba(15, 23, 42, 0.92) !important;
+  .landing-tile-title {
+    font-size: 0.75rem;
+  }
+  .landing-tile-desc {
+    font-size: 0.65rem;
+  }
+  .center-content {
+    padding: 2px 0;
+    width: 96%;
+    height: 96%;
   }
 }
