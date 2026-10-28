@@ -1,231 +1,325 @@
 # 🏥 CodeBlue - Magánklinika Társasjáték
 
 > **Soproni Egyetem Hackathon 2026** – „Gazdálkodj okosan!” újratöltve, modern egészségügyi köntösben.  
-> 🌐 **Éles online verzió:** [https://codeblue.branchlab.tech](https://codeblue.branchlab.tech)
+> 🌐 **Éles online verzió:** [https://codeblue.branchlab.tech](https://codeblue.branchlab.tech)  
+> ⚡ **CI/CD:** 152 / 152 automatizált egységteszt zölden fut · 0 linter hiba · Docker konténeres felhő üzem
 
 ---
 
 ## 📋 Tartalomjegyzék
 
-1. [A Játék Célja és Szabályai](#-a-játék-célja-és-szabályai)
-2. [Orvosi Karakterek és Szerepkörök](#-orvosi-karakterek-és-szerepkörök)
-3. [Játékmódok: Online Multiplayer és Hotseat](#-játékmódok)
-4. [A Játéktábla, Kártyák és Részlegek](#-a-játéktábla-kártyák-és-részlegek)
-5. [Pénzügyek: Klinikai Bank és Hitel](#-pénzügyek-klinikai-bank-és-hitel)
-6. [Zsűri Tesztpanel (DevTools)](#-zsűri-tesztpanel-devtools)
-7. [Technológiai Stack és Architektúra](#-technológiai-stack-és-architektúra)
-8. [Telepítés és Helyi Futtatás](#-telepítés-és-helyi-futtatás)
-9. [Docker és Éles Üzembe Helyezés](#-docker-és-éles-üzembe-helyezés)
-10. [Tesztelés és Kódminőség](#-tesztelés-és-kódminőség)
-11. [Készítők & Licenc](#-készítők--licenc)
+1. [A Játék Lényege: „Gazdálkodj okosan!” orvosi köntösben](#1-a-játék-lényege-gazdálkodj-okosan-orvosi-köntösben)
+2. [A Játék Célja és a Hármas Győzelmi Feltétel](#2-a-játék-célja-és-a-hármas-győzelmi-feltétel)
+3. [Orvosi Karakterek és Szerepkörök](#3-orvosi-karakterek-és-szerepkörök)
+4. [Játékmódok: Online Multiplayer, Hotseat és Bot Demó](#4-játékmódok-online-multiplayer-hotseat-és-bot-demó)
+5. [Mesterséges Intelligencia & Autonóm AI Botok](#5-mesterséges-intelligencia--autonóm-ai-botok)
+6. [A Játéktábla Mezői és a 40 Lapos Eseménykártya Pakli](#6-a-játéktábla-mezői-és-a-40-lapos-eseménykártya-pakli)
+7. [A Klinika 8 Megépíthető Részlege](#7-a-klinika-8-megépíthető-részlege)
+8. [Pénzügyi Rendszer: Klinikai Bank, Megtakarítás és Hitel](#8-pénzügyi-rendszer-klinikai-bank-megtakarítás-és-hitel)
+9. [Fejlesztői Mód (DevTools Tesztpanel)](#9-fejlesztői-mód-devtools-tesztpanel)
+10. [Reszponzív Megjelenés és Felhasználói Élmény](#10-reszponzív-megjelenés-és-felhasználói-élmény)
+11. [Technológiai Stack és Architektúra](#11-technológiai-stack-és-architektúra)
+12. [Telepítés és Helyi Futtatás](#12-telepítés-és-helyi-futtatás)
+13. [Docker és Éles Üzembe Helyezés (OCI)](#13-docker-és-éles-üzembe-helyezés-oci)
+14. [Tesztelés és Kódminőség (152 Teszt)](#14-tesztelés-és-kódminőség-152-teszt)
+15. [Készítők & Licenc](#15-készítők--licenc)
 
 ---
 
-## 🎯 A Játék Célja és Szabályai
+<a id="1-a-játék-lényege-gazdálkodj-okosan-orvosi-köntösben"></a>
+## 🏛️ 1. A Játék Lényege: „Gazdálkodj okosan!” orvosi köntösben
 
-A **CodeBlue - Magánklinika** egy körökre osztott, stratégiai-gazdasági digitális társasjáték. A játékosok neves orvos-vállalkozók bőrébe bújva építik fel a saját magánklinikájukat. A győzelemhez okos tőkegazdálkodásra, a váratlan események kivédésére és a klinikai kapacitások ütemezett bővítésére van szükség.
+A **CodeBlue - Magánklinika** a legendás magyar „Gazdálkodj okosan!” társasjáték szellemi örököse, melyet a Soproni Egyetem 2026-os Hackathonjára álmodtunk újra 21. századi, modern egészségügyi-vállalkozói környezetben.
 
-### 🏆 Hármas Győzelmi Feltétel:
+A játékosok nem egy átlagos lakást rendeznek be bútorokkal és háztartási gépekkel, hanem **orvos-vállalkozóként saját csúcstechnológiás magánklinikájukat építik fel**. A játék megőrzi az eredeti társasjáték legélvezetesebb elemeit (kockadobás, körbejárás, váratlan szerencsekártyák, banki betétek, kötelező biztosítások és hitelek), miközben valósághű gazdasági és orvosszakmai döntések elé állítja a résztvevőket.
 
-A játékot az az orvos nyeri meg, aki elsőként teljesíti **mind a 3 feltételt**:
+### 🔄 Párhuzamok a klasszikus és az orvosi verzió között:
 
-1. **8 / 8 Klinikai Részleg felépült** a klinikáján.
-2. **Legalább 1 000 000 KK (Klinikai Korona)** tartaléktőkével rendelkezik.
-3. **0 KK banki tartozása van** (minden korábbi hitelt maradéktalanul visszafizetett).
-
----
-
-## 🩺 Orvosi Karakterek és Szerepkörök
-
-A játékban 4 egyedi orvosi karakter választható, saját portréval, titulusokkal és színkóddal:
-
-| Karakter           | Titulus                            | Szerepkör                                                                 | Színkód                   |
-| :----------------- | :--------------------------------- | :------------------------------------------------------------------------ | :------------------------ |
-| **Dr. Sebész**     | Vezető Sebészorvos                 | Hidegvérű precizitás a műtőben, sürgősségi beavatkozások mestere.         | `#00b4d8` (Ciánkék)       |
-| **Dr. Diagnoszta** | Képalkotó és Belgyógyász Szakorvos | Kiemelkedő analitikus készség, komplex diagnosztika és leletértékelés.    | `#7209b7` (Lila)          |
-| **Dr. Főorvos**    | Orvos-igazgató & Intézetvezető     | Kiváló stratégiai és intézményvezetési érzék, akkreditációk nagymestere.  | `#2a9d8f` (Smaragdzöld)   |
-| **Dr. Rezidens**   | Kutató és Fiatal Szakorvosjelölt   | Fiatalos lendület, modern telemedicina és mesterséges intelligencia híve. | `#f77f00` (Meleg Narancs) |
+| Klasszikus „Gazdálkodj okosan!” | 🏥 CodeBlue - Magánklinika | Gazdasági szerepe a játékban |
+| :--- | :--- | :--- |
+| **Lakásvásárlás és bútorok** | **8 Klinikai Részleg megépítése** (SBO, Műtőblokk, CT/MRI, ITO stb.) | Hosszú távú infrastrukturális beruházás, a végső győzelem alapköve. |
+| **Készpénz / Forint** | **Klinikai Korona (KK)** | A klinika likviditása, amiből fizetjük a fenntartást és a bővítéseket. |
+| **START mező (Fizetés)** | **START – Klinika Főbejárat (+300 000 KK)** | Körönkénti működési és állami finanszírozási támogatás. |
+| **Takarékbetétkönyv / OTP** | **Klinikai Megtakarítási Betét (kamatozó)** | A felesleges tőke biztonságos kamatoztatása a váratlan kiadások ellen. |
+| **Házgyári hitel / OTP kölcsön** | **Likviditási Banki Hitel** | Gyors tőkeinjekció azonnali építkezéshez, de kötelező kamattal és törlesztéssel. |
+| **Biztosítás / Kötvények** | **Kórházfejlesztési Kötvény & Részvények** | Portfólió-diverzifikáció magasabb hozamért. |
+| **Szerencsekártyák** | **40 db Klinikai Hírek & Eseménykártya** | ÁNTSZ auditok, VIP adományok, műszerlízingek, orvosi műhibaperek és kutatási pályázatok. |
+| **Kiesés / Csőd** | **Intézményi Csőd** | Ha a tőke elfogy és a kötelezettségek nem fizethetők ki, a klinika csődbe megy. |
 
 ---
 
-## 🎮 Játékmódok
+<a id="2-a-játék-célja-és-a-hármas-győzelmi-feltétel"></a>
+## 🎯 2. A Játék Célja és a Hármas Győzelmi Feltétel
 
-### 1. 🌐 Online Multiplayer (Valós idejű WebSocket)
+A CodeBlue-ban nem elég csupán gazdagnak lenni vagy felépíteni egy-két osztályt: a valódi sikerhez **komplex, fenntartható kórházmenedzsmentre** van szükség.
 
-- **Akár 4 külön orvos** játszhat valós időben, 4 különböző laptopról vagy mobiltelefonról.
-- **Könnyen megosztható szobakódok:** 4-jegyű egyedi kódok (pl. `CB-6250`).
-- **Valós idejű állapot-szinkronizáció:** Socket.io kétirányú adatkapcsolat, automatikus körváltás, szobavezérlés és lecsatlakozás/visszacsatlakozás kezelés.
+### 🏆 A Hármas Győzelmi Feltétel:
+A játékot az az orvos nyeri meg azonnal, aki elsőként teljesíti **mind a 3 feltételt**:
+
+1. 🏗️ **Mind a 8 Klinikai Részleg felépült:** A klinika teljes orvosszakmai felkészültséget ért el.
+2. 💰 **Legalább 1 000 000 KK tartaléktőke:** Rendelkezésre áll a biztonságos, folyamatos működéshez szükséges likvid tőke (készpénzben vagy banki megtakarításban).
+3. 🛡️ **0 KK banki tartozás:** Minden korábban felvett hitel maradéktalanul visszafizetésre került; a klinika 100%-ig adósságmentes.
+
+---
+
+<a id="3-orvosi-karakterek-és-szerepkörök"></a>
+## 🩺 3. Orvosi Karakterek és Szerepkörök
+
+A játékban 4 különleges orvoskarakter választható, saját egyedi portréval, titulusokkal, szakmai háttérrel és jellegzetes színkóddal:
+
+| Karakter | Titulus | Szakterület & Személyiség | Színkód |
+| :--- | :--- | :--- | :--- |
+| **Dr. Sebész** | Vezető Sebészorvos | Hidegvérű precizitás a műtőben, sürgősségi beavatkozások és műtéti kapacitásbővítés mestere. | `#00b4d8` (Ciánkék) |
+| **Dr. Diagnoszta** | Képalkotó & Belgyógyász | Kiemelkedő analitikus készség, komplex diagnosztika, leletértékelés és adatvezérelt döntések. | `#7209b7` (Mély Lila) |
+| **Dr. Főorvos** | Orvos-igazgató & Intézetvezető | Intézményi stratégia, kórházi akkreditációk, pályázatok és a kamarával való kapcsolatok nagymestere. | `#2a9d8f` (Smaragdzöld) |
+| **Dr. Rezidens** | Fiatal Szakorvosjelölt | Fiatalos lendület, innovatív telemedicina, mesterséges intelligencia és modern betegellátási technológiák. | `#f77f00` (Narancssárga) |
+
+---
+
+<a id="4-játékmódok-online-multiplayer-hotseat-és-bot-demó"></a>
+## 🎮 4. Játékmódok: Online Multiplayer, Hotseat és Bot Demó
+
+A játék 3 rugalmas módban játszható:
+
+### 1. 🌐 Valós Idejű Online Multiplayer (Socket.io)
+- **Többeszközös élmény:** Akár 4 játékos játszhat egyidejűleg külön mobiltelefonról, táblagépről vagy laptopról.
+- **Egyedi 4-jegyű szobakódok:** Gyors szobanyitás (pl. `CB-8421`) és azonnali csatlakozás.
+- **Szerverkapacitás:** A backend optimalizált memóriakezeléssel akár **50 párhuzamos játékszobát** képes egyidejűleg kiszolgálni.
+- **Újracsatlakozás és lecsatlakozás-védelem:** Ha egy játékos netkapcsolata megszakad, 30 másodperces visszaszámláló indul; az állapot automatikusan szinkronizálódik a visszatéréskor.
+- **Szavazásos visszavágó rendszer (Rematch):** A meccs végén egyetlen kattintással újraindítható a parti azonos játékosokkal.
 
 ### 2. 👥 Helyi Játék (Hotseat)
+- 2–4 orvos játszhat ugyanazon a képernyőn, felváltva használva a kezelőfelületet.
+- Ideális egygépes szórakozáshoz, oktatási demonstrációhoz vagy projektbemutatóhoz.
 
-- 2–4 játékos játszik ugyanazon az egy képernyőn.
-- Felváltva dobnak és döntenek a bővítésekről, ideális egygépes bemutatókhoz és hackathon prezentációkhoz.
-
----
-
-## 🗺️ A Játéktábla, Kártyák és Részlegek
-
-### 36 Mezőből Álló Periméter Tábla:
-
-- **0. START Mező:** Minden áthaladáskor **+300 000 KK** orvosi támogatás jár.
-- **Bevételi Mezők (Zöld):** Magánrendelés bevétele, Telemedicina konzultáció, Klinikai audit prémium.
-- **Kiadási Mezők (Piros):** Műszerlízing, Kamarai tagdíj, Sürgősségi rezsiköltség, Műhiba-biztosítás.
-- **Klinikai Hírek & Események (Kék):** Kártyahúzás a 40 lapos pakliból.
-- **Részlegvásárlási Lehetőség (Lila):** Lehetőség új osztályok megvásárlására.
-- **Speciális Mezők:**
-  - _Szirénázó Rohammentő:_ Kiemelt sürgősségi bónusz vagy azonnali beavatkozás.
-  - _Orvoskongresszus:_ Szakmai kapcsolatépítés és előadói díj.
-  - _Kamarai Audit:_ Pénzügyi és minőségi átvilágítás.
-
-### 🃏 40 Darabos Eseménykártya Pakli:
-
-- **12 db Bevételi kártya:** Állami kutatási támogatás, VIP adomány, sikeres gyógyszerkísérlet.
-- **12 db Kiadási kártya:** Elromlott CT gép javítása, ÁNTSZ ellenőrzés bírsága, szoftverlicenc megújítás.
-- **8 db Előnykártya:** Extra kockadobás, ingyenes részlegbővítés, mentőautó elsőbbség.
-- **8 db Hátránykártya:** Kötelező továbbképzés miatti körből kimaradás, karantén visszalépés.
-
-### 🏗️ 8 Megépíthető Klinikai Részleg:
-
-1. Sürgősségi Betegellátó Osztály (SBO)
-2. Belgyógyászat & Kardiológia
-3. Sebészeti Műtőblokk
-4. Képalkotó Diagnosztika (CT & MRI)
-5. Központi Laboratórium
-6. Intenzív Terápiás Osztály (ITO)
-7. Rehabilitációs és Gyógytorna Központ
-8. VIP Prémium Fekvőbeteg Lakosztály
+### 3. 🤖 1-Kattintásos Gyors Sablonok és Bot Demó
+A helyi beállító képernyőn egyetlen kattintással választható játékmód-sablon:
+- **`[🤖 Teljes Bot Harc (Demó)]`**: Mind a 4 orvost AI irányítja; a játék autonóm módon zajlik le a néző szeme előtt.
+- **`[👤 1 Ember + Botok]`**: Egyetlen élő játékos küzd meg 1–3 gépi orvos-vállalkozó ellen.
+- **`[👥 Hotseat (Csak Emberek)]`**: Klasszikus többemberes társasjáték.
 
 ---
 
-## 🏦 Pénzügyek: Klinikai Bank és Hitel
+<a id="5-mesterséges-intelligencia--autonóm-ai-botok"></a>
+## 🧠 5. Mesterséges Intelligencia & Autonóm AI Botok
 
-A játékosok bármikor megnyithatják a **Klinikai Bank** panelt:
+A CodeBlue saját **heurisztikus döntéshozatali motorral** felszerelt AI botokat alkalmaz, amelyek teljes mértékben betartják a játékszabályokat, és emberi segítség nélkül képesek játszani:
 
-- **Hitel felvétele:** Fix konstrukciókban (100 000 KK – 500 000 KK lépcsőkben) a gyors terjeszkedéshez.
-- **Kamat és Törlesztés:** A felvett hiteleket kötelező visszafizetni a végső győzelemhez.
-- **Csődelkerülés:** A likviditás menedzselése kritikus fontosságú.
+### A 4 Neves AI Orvosprofil:
+1. **Dr. AI Neumann** (Diagnoszta – `#7209b7`): Analitikus szemlélet, diagnosztikai és laboratóriumi fejlesztési fókusz.
+2. **Dr. AI Turing** (Főorvos – `#2a9d8f`): Kiegyensúlyozott intézményvezetés, erős likviditási tartalékképzés.
+3. **Dr. AI Lovelace** (Rezidens – `#f77f00`): Dinamikus, bátor beruházó, telemedicinás és sürgősségi orientáció.
+4. **Dr. AI Hippokratész** (Sebész – `#0284c7`): Sebészeti és műtőblokk-központú stratégia.
 
----
-
-## 🛠️ Zsűri Tesztpanel (DevTools)
-
-A hackathon zsűrizésének megkönnyítésére beépítettünk egy **Zsűri Mód** tesztpanelt:
-
-- **Elérés:** A felső fejléc **„Zsűri Mód”** gombjával, vagy az URL-ben `?demo=1` paraméterrel.
-- **Funkciók:**
-  - 💰 _Tőke beállítása:_ Bármelyik játékos pénzének azonnali növelése/csökkentése.
-  - 📍 _Teleportálás:_ Bármelyik bábu áthelyezése a 36 mező bármelyikére.
-  - 🎴 _Kártyaválasztó:_ Mind a 40 kártya tetszőleges előhívása és tesztelése.
-  - 🏆 _Azonnali Győzelem:_ 1-kattintásos győzelmi állapot előidézése a díjátadó és funkcióbemutató gyorsításához.
-  - 🔊 _Web Audio teszter:_ Mind a 4 egyedi szintetizált hanghatás külön tesztelése és némítása.
+### Az AI Döntési Stratégiája:
+- **Kockadobás & Eseménykezelés:** A bot sorra kerülve azonnal dob a kockával, felolvassa és érvényesíti az eseménykártyákat.
+- **Prioritásos Részlegvásárlás:** A kör építési fázisában megvizsgálja a pénzügyi lehetőségeit, és ha van elég tőkéje a 300 000 KK-s biztonsági tartalék felett, megvásárolja a számára legfontosabb hiányzó klinikai részleget.
+- **Okos Bankolás és Lekötés:** Ha a bot épített a körben és még mindig rendelkezik felesleges készpénzzel a tartalék felett, **meglátogatja a bankot, és a szabad tőkét megtakarítási betétbe helyezi el kamatozni**, pontosan úgy, mint egy tudatos orvos-vállalkozó.
 
 ---
 
-## 💻 Technológiai Stack és Architektúra
+<a id="6-a-játéktábla-mezői-és-a-40-lapos-eseménykártya-pakli"></a>
+## 🗺️ 6. A Játéktábla Mezői és a 40 Lapos Eseménykártya Pakli
 
-### Frontend:
+### A 36 Mezőből Álló Periméter Tábla:
+A játéktábla egy 10×10-es rács külső kerületén fut körbe, 36 gondosan megtervezett mezővel:
 
-- **React 19** & **TypeScript**
-- **Vite** villámgyors HMR és optimalizált production build
-- **Vanilla CSS Design System:** Prémium dark mode, glassmorphism, zökkenőmentes reszponzivitás és micro-animációk
-- **Web Audio API:** Dinamikusan szintetizált orvosi hangeffektek (kockadobás, pénzmozgás, sziréna, fanfár)
-- **Lucide Icons** modern vektoros ikonográfia
+- 🚩 **#0. START Mező (Klinika Főbejárat):** Minden áthaladáskor **+300 000 KK** működési támogatást kap az orvos.
+- 📈 **Bevételi Mezők (Zöld):** Magánrendelés bevétele, Telemedicina konzultáció, Klinikai audit prémium, Kutatási támogatás.
+- 📉 **Kiadási Mezők (Piros):** Műszerlízing, Orvosi Kamarai tagdíj, Sürgősségi rezsiköltség, Műhiba-biztosítás, Informatikai karbantartás.
+- ✉️ **Klinikai Hírek & Események (Kék):** Automatikus kártyahúzás a 40 lapos eseménypakliból.
+- 🟣 **Részlegvásárlási Mezők (Lila):** Lehetőség új osztályok megvásárlására és hozzáadására a klinikához.
+- ⚡ **Speciális Mezők:**
+  - **#4. Szirénázó Rohammentő:** Sürgősségi betegszállítás, amely **azonnali extra kockadobást** biztosít a játékosnak!
+  - **#18. Orvoskongresszus:** Szakmai előadás megtartása, nemzetközi kapcsolatépítés és előadói tiszteletdíj.
+  - **#28. Akkreditációs Vizsga:** Minőségbiztosítási audit a magas szintű betegbiztonságért.
+  - **#34. Kamarai Audit:** Pénzügyi átvilágítás a szabályos gazdálkodás ellenőrzésére.
 
-### Backend:
+### 🃏 A 40 Lapos Eseménykártya Pakli:
+A kártyák valós orvosi szituációkat dolgoznak fel, 4 kategóriában:
 
-- **Node.js 20 & Express**
-- **Socket.io (WebSocket):** Valós idejű szobakezelés, állapotközvetítés, hurokvédelemmel ellátott kétirányú szinkronizáció
-- **Biztonsági réteg:** Bemeneti szanitáció (XSS szűrés, 32 karakternél hosszabb nevek levágása, szigorú `CB-XXXX` kódellenőrzés), kapcsolatonkénti rate limiting (40 esemény/mp limit), elhagyott szobák automatikus memóriatisztítása (TTL GC), globális összeomlásvédelem
-
-### Infrastruktúra & DevOps:
-
-- **Docker & Docker Compose:** Izolált konténeres futtatás
-- **Oracle Cloud Infrastructure (OCI):** Éles felhő infrastruktúra
-- **Caddy Reverse Proxy:** Automatikus Let's Encrypt SSL/TLS tanúsítványkezelés a `codeblue.branchlab.tech` domainen
+1. **12 db Bevételi kártya (Zöld):** Állami kutatás-fejlesztési pályázat elnyerése, VIP beteg nagylelkű adománya, nemzetközi gyógyszerkísérlet sikere (+80 000 – +350 000 KK).
+2. **12 db Kiadási kártya (Piros):** Elromlott a digitális röntgencső, ÁNTSZ felülvizsgálat büntetése, orvosi szoftverlicenc lejárt (-60 000 – -300 000 KK).
+3. **8 db Előnykártya (Kék):** Újabb kockadobás azonnal, ingyenes részlegfejlesztés, orvosi szakmai díj, gyorsított engedélyezés.
+4. **8 db Hátránykártya (Sárga):** Kötelező járványügyi karantén miatt visszalépés 3 mezőt, körből kimaradás szigorított kamarai továbbképzés miatt.
 
 ---
 
-## 🚀 Telepítés és Helyi Futtatás
+<a id="7-a-klinika-8-megépíthető-részlege"></a>
+## 🏗️ 7. A Klinika 8 Megépíthető Részlege
+
+A magánklinika tervrajza 8 kulcsfontosságú orvosi részlegből áll. A győzelemhez mind a 8 részleget fel kell építeni:
+
+| # | Részleg Neve | Beruházási Költség | Orvosszakmai Funkció |
+| :-: | :--- | :---: | :--- |
+| **1.** | **Sürgősségi Betegellátó Osztály (SBO)** | 250 000 KK | 24/7 azonnali betegfogadás, triázs és stabilizálás. |
+| **2.** | **Belgyógyászat & Kardiológia** | 300 000 KK | Szív- és érrendszeri kivizsgálás, EKG és ultrahang labor. |
+| **3.** | **Sebészeti Műtőblokk** | 450 000 KK | Steril lamináris légáramlású műtők egynapos és nagysebészethez. |
+| **4.** | **Képalkotó Diagnosztika (CT & MRI)** | 400 000 KK | 3 Tesla MRI és 128 szeletes CT csúcstechnológiás leletalkotás. |
+| **5.** | **Központi Laboratórium** | 200 000 KK | Automatizált vérkép, biokémiai és mikrobiológiai gyorstesztek. |
+| **6.** | **Intenzív Terápiás Osztály (ITO)** | 500 000 KK | Életfunkció-támogató monitorozás, lélegeztetőgépek. |
+| **7.** | **Rehabilitációs és Gyógytorna Központ**| 250 000 KK | Műtét utáni felépülés, hidroterápia és robotikus mozgásterápia. |
+| **8.** | **VIP Prémium Fekvőbeteg Lakosztály** | 350 000 KK | Ötcsillagos hotelszintű elhelyezés és exkluzív orvosi felügyelet. |
+
+---
+
+<a id="8-pénzügyi-rendszer-klinikai-bank-megtakarítás-és-hitel"></a>
+## 🏦 8. Pénzügyi Rendszer: Klinikai Bank, Megtakarítás és Hitel
+
+A fejléc **„Bank”** gombjával elérhető a **Klinikai Bank** központi felülete, ahol a játékosok valós gazdasági tranzakciókat hajthatnak végre:
+
+### 1. 💰 Megtakarítási Betét (Kamatozó)
+- A felesleges készpénz bármikor leköthető a banknál.
+- A megtakarítás **körönként fix kamatot termel**, és védve van a készpénzt érintő váratlan eseményektől.
+- Bármikor díjmentesen visszaváltható likvid készpénzre.
+
+### 2. 📜 Kórházfejlesztési Kötvény & 📈 Klinikai Részvény
+- Magasabb hozamú pénzügyi eszközök a hosszú távon gondolkodó orvos-befektetők számára.
+
+### 3. 💳 Likviditási Hitel (Banki Kölcsön)
+- Ha egy játékosnak gyorsan tőkére van szüksége egy drága részleg (pl. Műtőblokk vagy ITO) felépítéséhez, hitelt vehet fel 100 000 KK-s lépcsőkben.
+- **Kamatfizetési kötelezettség:** A hitel után kamat terheli a játékost.
+- **A Győzelem Záloga:** A játékot **nem lehet megnyerni fennálló hiteltartozással**! A győzelemhez a hitelt maradéktalanul vissza kell törleszteni.
+
+---
+
+<a id="9-fejlesztői-mód-devtools-tesztpanel"></a>
+## 🛠️ 9. Fejlesztői Mód (DevTools Tesztpanel)
+
+A hackathon bemutatók és a zsűrizés megkönnyítésére beépítettünk egy diszkrét, de minden részletre kiterjedő **Fejlesztői Mód** tesztpanelt:
+
+- **Megnyitás:** A felső fejléc sárga kulcs ikonjára kattintva (`Fejlesztői Mód`), vagy az URL-ben `?demo=1` paraméterrel.
+- **Főbb Eszközök:**
+  - 💰 **Tőke & Hitel Testre Szabása:** Bármelyik orvos pénzének azonnali növelése vagy csökkentése.
+  - 📍 **Interaktív Mezőre Teleportálás:** Ha a Fejlesztői Mód aktív, a tábla bármelyik mezőjére rákattintva az aktív bábu azonnal odaugrik, kiváltva a mező hatását.
+  - 🃏 **Kártyaválasztó Teszter:** Mind a 40 eseménykártya előnézete és azonnali felhúzása teszteléshez.
+  - 🏆 **1-Kattintásos Győzelem:** Azonnali győzelmi állapot generálása a díjátadó és győzelmi animációk bemutatásához.
+  - 🔊 **Web Audio Szintetizátor Teszt:** A 4 egyedi szintetizált hanghatás külön-külön tesztelése és némítása.
+
+---
+
+<a id="10-reszponzív-megjelenés-és-felhasználói-élmény"></a>
+## 📱 10. Reszponzív Megjelenés és Felhasználói Élmény
+
+A játék felhasználói felülete asztali gépen, tableten és okostelefonon is kompromisszummentes élményt nyújt:
+
+- **Kompakt 2×2 Mobilos PlayerHUD:** Telefonon a 4 orvosi kártya egy áttekinthető 2 oszlopos rácsba rendeződik, alig 120px-re csökkentve az élő státuszsáv magasságát.
+- **Szigorúan Egy Helyben Forgó 3D Kártyák:** A kártyamegjelenítés zárt dobozmodellt (`box-sizing: border-box`) és geometriai középponti forgástengelyt kapott, így mind az asztali nézetben, mind a legkeskenyebb okostelefonokon tökéletesen a saját tengelye körül fordul meg, nulla oldalirányú csúszással vagy kitakarással.
+- **Határon Belül Maradó Bábuk:** A bábuk mobilos méretezése és finomított lebegő animációja garantálja, hogy a START mezőn álló 4 bábu sem lóg ki a játéktábla széléről.
+- **Kristálytiszta Mezőszámok (0..35):** Minden mező sorszáma tiszta fehér színt, erős kontrasztos sötét árnyékot és kiemelt rétegrendet (`z-index: 20`) kapott.
+- **Egygombos Space Irányítás:** Asztali gépen a billentyűzet `Space` gombjával a teljes játékfolyamat vezérelhető: Kockadobás ➔ Kártya jóváhagyása ➔ Kör befejezése.
+
+---
+
+<a id="11-technológiai-stack-és-architektúra"></a>
+## 💻 11. Technológiai Stack és Architektúra
+
+### Frontend Réteg:
+- **React 19 & TypeScript:** Komponensalapú, szigorúan típusbiztos felületkezelés.
+- **Vite 8:** Másodperc alatti Hot Module Replacement (HMR) és optimalizált rollup kötegelés.
+- **Vanilla CSS Design System:** Modern sötét téma, glassmorphism effektek, fluid reszponzivitás külső nehézkes CSS keretrendszerek nélkül.
+- **Web Audio API:** Teljesen procedurális, dinamikusan szintetizált orvosi hangeffektek külső MP3 fájlok nélkül.
+- **Lucide Icons:** Letisztult orvosi és pénzügyi vektoros ikonográfia.
+
+### Backend Réteg:
+- **Node.js 20 & Express:** Robusztus HTTP kiszolgálás és REST health endpointok (`/health`).
+- **Socket.io (WebSocket):** Valós idejű, kétirányú állapotközvetítés eseményalapú architektúrával.
+- **Védelmi és Stabilitási Rendszer:**
+  - Szigorú bemeneti szanitáció (XSS szűrés, 32 karakteres névhossz korlát, `CB-XXXX` szobakód validáció).
+  - Kapcsolatonkénti rate limiting (40 esemény/másodperc).
+  - Automatikus memóriatisztító szemétgyűjtő (TTL Room GC) az elhagyott szobák felszabadítására.
+  - Szerverkapacitás korlát: **50 aktív egyidejű szoba** biztonsági plafon.
+
+### Infrastruktúra & Üzemeltetés:
+- **Docker & Docker Compose:** Egyetlen könnyűsúlyú konténerbe csomagolt frontend és backend.
+- **Oracle Cloud Infrastructure (OCI Frankfurt):** Dedikált felhő virtuális gép.
+- **Caddy Web Server:** Automatikus Let's Encrypt SSL/TLS reverse proxy a `codeblue.branchlab.tech` domainen.
+
+---
+
+<a id="12-telepítés-és-helyi-futtatás"></a>
+## 🚀 12. Telepítés és Helyi Futtatás
 
 ### Előfeltételek:
-
-- [Node.js](https://nodejs.org/) (20.x vagy újabb)
+- [Node.js](https://nodejs.org/) (20.x vagy újabb verzió)
 - npm (Node csomagkezelő)
 
-### 1. Függőségek telepítése:
-
+### 1. A tároló klónozása:
 ```bash
 git clone https://github.com/Uni-Sopron/codeblue.git
 cd codeblue
 npm install
 ```
 
-### 2. Fejlesztői szerver indítása (Frontend):
-
+### 2. A frontend fejlesztői szerver indítása:
 ```bash
 npm run dev
 ```
+A böngészőben nyisd meg: `http://localhost:5173/`
 
-Nyisd meg a böngészőben: `http://localhost:5173/`
-
-### 3. Multiplayer backend indítása helyben:
-
-Egy külön terminálban:
-
+### 3. A helyi multiplayer szerver indítása:
+Egy külön terminálablakban:
 ```bash
 cd server
 npm install
 npm start
 ```
-
-A szerver a `http://localhost:3001` porton figyel.
+A Socket.io szerver a `http://localhost:3001` porton figyel.
 
 ---
 
-## 🐳 Docker és Éles Üzembe Helyezés
+<a id="13-docker-és-éles-üzembe-helyezés-oci"></a>
+## 🐳 13. Docker és Éles Üzembe Helyezés (OCI)
 
-A teljes alkalmazás (frontend build + Socket.io backend) egyetlen Docker konténerként is futtatható:
+A teljes alkalmazás (production frontend build + Socket.io backend) egyetlen Docker konténerként futtatható:
 
 ```bash
-# 1. Frontend lefordítása és statikus fájlok frissítése
+# 1. Frontend lefordítása és a szerver statikus mappájába másolása
 npm run build
 powershell -Command "Copy-Item -Recurse -Force dist/* server/public/"
 
-# 2. Docker konténer indítása
+# 2. Docker konténer felépítése és indítása
 docker compose up -d --build
 ```
 
-A backend konténer a 3001-es porton indul el, és zökkenőmentesen integrálódik meglévő reverse proxy hálózatokba (pl. Caddy / Nginx).
+A backend konténer a 3001-es porton indul el, és közvetlenül illeszkedik a meglévő Caddy vagy Nginx reverse proxy hálózathoz.
 
 ---
 
-## 🧪 Tesztelés és Kódminőség
+<a id="14-tesztelés-és-kódminőség-152-teszt"></a>
+## 🧪 14. Tesztelés és Kódminőség (152 Teszt)
 
-A projekt kiterjedt beépített tesztkészlettel rendelkezik Node.js beépített tesztfuttatójával:
+A projekt a Node.js beépített natív tesztfuttatóját (`node --test`) használja, amely villámgyorsan, külső nehézkes könyvtárak nélkül futtat le **152 kiterjedt egységtesztet**:
 
 ```bash
-# Egységtesztek futtatása (játékmotor, hangok, biztonsági szanitáció és multiplayer invariánsok)
+# Egységtesztek futtatása (játékmotor, bank, bot stratégia, hangok, szanitáció, szobainvariánsok)
 npm test
 
-# Típus- és stílusellenőrzés
+# Szigorú ESLint kódstílus-ellenőrzés
 npm run lint
 
-# Production build tesztelése
+# TypeScript típusellenőrzés és production build
 npm run build
 ```
 
-- **Egységtesztek:** 21 / 21 automatizált teszt zölden fut.
-- **Linter:** 0 hiba, 0 figyelmeztetés.
-- **Típusellenőrzés:** Szigorú TypeScript fordítás (`tsc -b`).
+### ✅ Tesztelési Lefedettség:
+- **152 / 152 automatizált teszt sikeres (0 hiba):**
+  - Játékmotor fázisátmenetek, kockadobás, mezőhatások és győzelmi feltételek.
+  - Klinikai Bank: kamatszámítás, betételhelyezés, hitelfelvétel és törlesztési invariánsok.
+  - AI Bot heurisztika: önálló döntéshozatal, részlegvásárlás és többlettőke-lekötés.
+  - Web Audio hangszintetizátor némítási és felhasználói interakciós zárai.
+  - WebSocket szobakezelés: szobakód-validáció, XSS szanitáció, 50 szobás plafon és visszacsatlakozási időzítők.
+- **ESLint:** 0 hiba, 0 figyelmeztetés.
+- **TypeScript:** Szigorú típusellenőrzés (`tsc -b`).
 
 ---
 
-## 👥 Készítők & Licenc
+<a id="15-készítők--licenc"></a>
+## 👥 15. Készítők & Licenc
 
 Készült a **Soproni Egyetem Hackathon 2026** alkalmából.
 
 ### 🌟 CodeBlue Csapat:
-
 - 👨‍💻 **Wild Péter**
 - 👨‍💻 **Morvai Márkó**
 - 👩‍💻 **Moldicz Dzsenifer Fanni**
