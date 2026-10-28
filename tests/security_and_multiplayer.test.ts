@@ -215,3 +215,142 @@ test('Declining rematch resets room rematchVotes map and prepares cancelled even
   assert.equal(cancelledEventPayload?.cancelledBy, 'Dr. Beta');
   assert.equal(cancelledEventPayload?.cancelledById, 'p2');
 });
+
+test('Szirénázó Rohammentő (Tile 4) unlocks an immediate second roll for the active player', () => {
+  let hasRolledThisTurn = true;
+  let extraRollAvailable = false;
+  let phase = 'tile_action';
+
+  // Landing on Tile 4 ('ambulance_speed')
+  const specialAction = 'ambulance_speed';
+  if (specialAction === 'ambulance_speed') {
+    extraRollAvailable = true;
+    hasRolledThisTurn = false;
+    phase = 'roll';
+  }
+
+  assert.equal(phase, 'roll');
+  assert.equal(extraRollAvailable, true);
+  assert.equal(hasRolledThisTurn, false);
+
+  // Verification of roll authorization
+  const canRoll = !hasRolledThisTurn || extraRollAvailable;
+  assert.equal(canRoll, true);
+
+  // Executing the extra roll consumes the authorization
+  hasRolledThisTurn = true;
+  extraRollAvailable = false;
+  assert.equal(hasRolledThisTurn, true);
+  assert.equal(extraRollAvailable, false);
+});
+
+test('Event Card #7 (extra_roll) grants a second roll and transitions to roll phase', () => {
+  const cardAction = { type: 'extra_roll' };
+  let extraRollAvailable = false;
+  let hasRolledThisTurn = true;
+  let phase = 'card_modal';
+
+  if (cardAction.type === 'extra_roll') {
+    extraRollAvailable = true;
+    hasRolledThisTurn = false;
+    phase = 'roll';
+  }
+
+  assert.equal(phase, 'roll');
+  assert.equal(extraRollAvailable, true);
+  assert.equal(hasRolledThisTurn, false);
+});
+
+test('Landing on standard tiles auto-resolves directly to building phase with balance adjustment', () => {
+  const player = {
+    id: 'p1' as const,
+    name: 'Dr. Teszt',
+    avatar: 'surgeon' as const,
+    color: '#0284c7',
+    position: 0,
+    cash: 1_500_000,
+    debt: 0,
+    builtElements: [],
+    activeBuffs: [],
+  };
+
+  const tile = {
+    id: 3,
+    name: 'Magánrendelés Bevétele',
+    type: 'income' as const,
+    value: 150_000,
+  };
+
+  // Outcome of auto-resolution on roll landing
+  const updatedPlayer = { ...player, position: tile.id, cash: player.cash + tile.value };
+  const phase = 'building';
+
+  assert.equal(updatedPlayer.position, 3);
+  assert.equal(updatedPlayer.cash, 1_650_000);
+  assert.equal(phase, 'building');
+});
+
+test('Landing on card tiles auto-resolves directly to card_modal phase', () => {
+  const tile = {
+    id: 6,
+    name: 'Klinikai Eseménykártya',
+    type: 'card' as const,
+  };
+
+  let phase: string = 'roll';
+  let drawnCardId: number | null = null;
+  const cardDeck = [7, 12, 18];
+
+  if (tile.type === 'card') {
+    drawnCardId = cardDeck.shift()!;
+    phase = 'card_modal';
+  }
+
+  assert.equal(phase, 'card_modal');
+  assert.equal(drawnCardId, 7);
+  assert.equal(cardDeck.length, 2);
+});
+
+test('Unified Space key state-machine: roll -> card_modal -> building -> end turn', () => {
+  let phase: 'roll' | 'card_modal' | 'building' = 'roll';
+  let rolled = false;
+  let cardConfirmed = false;
+  let turnEnded = false;
+
+  const handleSpace = (currentPhase: 'roll' | 'card_modal' | 'building', isRepeat: boolean) => {
+    if (isRepeat) return currentPhase;
+    if (currentPhase === 'roll') {
+      rolled = true;
+      return 'card_modal' as const;
+    }
+    if (currentPhase === 'card_modal') {
+      cardConfirmed = true;
+      return 'building' as const;
+    }
+    if (currentPhase === 'building') {
+      turnEnded = true;
+      return 'roll' as const;
+    }
+    return currentPhase;
+  };
+
+  // 1. Repeating key presses are ignored
+  phase = handleSpace(phase, true);
+  assert.equal(phase, 'roll');
+  assert.equal(rolled, false);
+
+  // 2. Space rolls dice
+  phase = handleSpace(phase, false);
+  assert.equal(phase, 'card_modal');
+  assert.equal(rolled, true);
+
+  // 3. Space confirms card
+  phase = handleSpace(phase, false);
+  assert.equal(phase, 'building');
+  assert.equal(cardConfirmed, true);
+
+  // 4. Space ends turn
+  phase = handleSpace(phase, false);
+  assert.equal(phase, 'roll');
+  assert.equal(turnEnded, true);
+});

@@ -9,6 +9,7 @@ import type {
   ClinicElementId,
   GameLog,
   ActiveBuff,
+  Tile,
   BankProduct,
 } from '../types/game.ts';
 import { GAME_CONSTANTS } from '../types/game.ts';
@@ -83,7 +84,306 @@ const createInitialState = (): GameState => ({
   winner: null,
   logs: [],
   roundPassBonusGranted: false,
+  extraRollAvailable: false,
 });
+
+
+/**
+ * Automatikus hitelfelvétel hiányzó kötelező kiadás esetén
+ */
+function calculateAutoLoan(currentCash: number, requiredAmount: number): { cashAfter: number; loanAmount: number } {
+  if (currentCash >= requiredAmount) {
+    return { cashAfter: currentCash - requiredAmount, loanAmount: 0 };
+  }
+  const deficit = requiredAmount - currentCash;
+  const units = Math.ceil(deficit / GAME_CONSTANTS.LOAN_UNIT);
+  const loanAmount = units * GAME_CONSTANTS.LOAN_UNIT;
+  const cashAfter = (currentCash + loanAmount) - requiredAmount;
+  return { cashAfter, loanAmount };
+}
+
+interface TileExecutionOutcome {
+  player: Player;
+  nextPhase: GamePhase;
+  drawnCard: Card | null;
+  cardDeck: number[];
+  discardDeck: number[];
+  extraRoll: boolean;
+  logs: GameLog[];
+}
+
+function executeTileAction(
+  currentP: Player,
+  tile: Tile | undefined,
+  roundPassBonusGranted: boolean,
+  cardDeck: number[],
+  discardDeck: number[],
+): TileExecutionOutcome {
+  if (!tile) {
+    return {
+      player: currentP,
+      nextPhase: 'building',
+      drawnCard: null,
+      cardDeck,
+      discardDeck,
+      extraRoll: false,
+      logs: [],
+    };
+  }
+
+  const updatedP: Player = { ...currentP };
+  const newLogs: GameLog[] = [];
+  let nextPhase: GamePhase = 'building';
+  let drawnCard: Card | null = null;
+  let newDeck = [...cardDeck];
+  let newDiscard = [...discardDeck];
+  let extraRoll = false;
+
+  switch (tile.type) {
+    case 'start': {
+      if (!roundPassBonusGranted) {
+        updatedP.cash += GAME_CONSTANTS.START_PASS_BONUS;
+        newLogs.push({
+          id: createLogId(),
+          playerId: currentP.id,
+          playerName: currentP.name,
+          message: `Megérkezés a START mezőre! Fenntartási támogatás: +${GAME_CONSTANTS.START_PASS_BONUS.toLocaleString()} KK.`,
+          timestamp: Date.now(),
+          type: 'money',
+        });
+      }
+      break;
+    }
+
+    case 'income': {
+      const val = tile.value ?? 150_000;
+      updatedP.cash += val;
+      newLogs.push({
+        id: createLogId(),
+        playerId: currentP.id,
+        playerName: currentP.name,
+        message: `${tile.name}: Jóváírás +${val.toLocaleString()} KK.`,
+        timestamp: Date.now(),
+        type: 'money',
+      });
+      break;
+    }
+
+    case 'expense': {
+      const val = tile.value ?? 100_000;
+      const penaltyImmunityIndex = updatedP.activeBuffs.findIndex((b) => b.type === 'penalty_immunity');
+      if (penaltyImmunityIndex !== -1) {
+        const updatedBuffs = [...updatedP.activeBuffs];
+        updatedBuffs.splice(penaltyImmunityIndex, 1);
+        updatedP.activeBuffs = updatedBuffs;
+        newLogs.push({
+          id: createLogId(),
+          playerId: currentP.id,
+          playerName: currentP.name,
+          message: `Felelősségbiztosítási mentesség aktiválva! A ${val.toLocaleString()} KK kiadás elengedve.`,
+          timestamp: Date.now(),
+          type: 'money',
+        });
+      } else {
+        const { cashAfter, loanAmount } = calculateAutoLoan(updatedP.cash, val);
+        updatedP.cash = cashAfter;
+        if (loanAmount > 0) {
+          updatedP.debt += loanAmount;
+          newLogs.push({
+            id: createLogId(),
+            playerId: currentP.id,
+            playerName: currentP.name,
+            message: `Pénzhiány miatt automatikus bankhitel felvétele: +${loanAmount.toLocaleString()} KK.`,
+            timestamp: Date.now(),
+            type: 'money',
+          });
+        }
+        newLogs.push({
+          id: createLogId(),
+          playerId: currentP.id,
+          playerName: currentP.name,
+          message: `${tile.name}: Levonás -${val.toLocaleString()} KK.`,
+          timestamp: Date.now(),
+          type: 'money',
+        });
+      }
+      break;
+    }
+
+    case 'card': {
+      if (newDeck.length === 0) {
+        newDeck = shuffleArray(newDiscard.length > 0 ? newDiscard : EVENT_CARDS.map((c) => c.id));
+        newDiscard = [];
+        newLogs.push({
+          id: createLogId(),
+          message: 'Az eseménykártya pakli elfogyott, a felhasznált lapok újrakeverve!',
+          timestamp: Date.now(),
+          type: 'system',
+        });
+      }
+
+      const drawnCardId = newDeck.shift()!;
+      newDiscard.push(drawnCardId);
+      drawnCard = EVENT_CARDS.find((c) => c.id === drawnCardId) ?? null;
+      nextPhase = 'card_modal';
+      break;
+    }
+
+    case 'purchase': {
+      const discountBuff: ActiveBuff = {
+        id: `buff_${Date.now()}`,
+        name: 'Beszállítói Tender Kedvezmény',
+        description: '15% kedvezmény a legközelebbi építkezésre',
+        type: 'building_discount',
+        value: 15,
+        remainingTurns: 2,
+      };
+      updatedP.activeBuffs = [...updatedP.activeBuffs, discountBuff];
+      newLogs.push({
+        id: createLogId(),
+        playerId: currentP.id,
+        playerName: currentP.name,
+        message: `${tile.name}: 15% építkezési kedvezmény jóváírva a következő vásárlásodra!`,
+        timestamp: Date.now(),
+        type: 'build',
+      });
+      break;
+    }
+
+    case 'special': {
+      switch (tile.specialAction) {
+        case 'ambulance_speed':
+          extraRoll = true;
+          nextPhase = 'roll';
+          newLogs.push({
+            id: createLogId(),
+            playerId: currentP.id,
+            playerName: currentP.name,
+            message: 'Szirénázó Rohammentő: Azonnali újabb dobási lehetőséget kaptál ebben a körben!',
+            timestamp: Date.now(),
+            type: 'move',
+          });
+          break;
+
+        case 'grant_fund': {
+          const grant = 200_000;
+          updatedP.cash += grant;
+          newLogs.push({
+            id: createLogId(),
+            playerId: currentP.id,
+            playerName: currentP.name,
+            message: `Egészségügyi Pályázati Alap támogatás: +${grant.toLocaleString()} KK kutatási forrás!`,
+            timestamp: Date.now(),
+            type: 'money',
+          });
+          break;
+        }
+
+        case 'medical_conference': {
+          const fee = 150_000;
+          updatedP.cash += fee;
+          newLogs.push({
+            id: createLogId(),
+            playerId: currentP.id,
+            playerName: currentP.name,
+            message: `Orvoskongresszus előadói tiszteletdíj: +${fee.toLocaleString()} KK.`,
+            timestamp: Date.now(),
+            type: 'money',
+          });
+          break;
+        }
+
+        case 'telemedicine': {
+          const builtCount = updatedP.builtElements.length;
+          const bonus = builtCount * 40_000;
+          if (bonus > 0) {
+            updatedP.cash += bonus;
+            newLogs.push({
+              id: createLogId(),
+              playerId: currentP.id,
+              playerName: currentP.name,
+              message: `Telemedicina jogdíjak (${builtCount} megépült részleg után): +${bonus.toLocaleString()} KK.`,
+              timestamp: Date.now(),
+              type: 'money',
+            });
+          } else {
+            newLogs.push({
+              id: createLogId(),
+              playerId: currentP.id,
+              playerName: currentP.name,
+              message: 'Telemedicina hálózat: Még nincs megépült részleged a jogdíjak folyósításához.',
+              timestamp: Date.now(),
+              type: 'system',
+            });
+          }
+          break;
+        }
+
+        case 'emergency_duty': {
+          const dutyBonus = 120_000;
+          updatedP.cash += dutyBonus;
+          newLogs.push({
+            id: createLogId(),
+            playerId: currentP.id,
+            playerName: currentP.name,
+            message: `Sürgősségi Készenléti Ügyelet pótlék: +${dutyBonus.toLocaleString()} KK.`,
+            timestamp: Date.now(),
+            type: 'money',
+          });
+          break;
+        }
+
+        case 'disaster_readiness': {
+          if (updatedP.debt === 0) {
+            const bonus = 100_000;
+            updatedP.cash += bonus;
+            newLogs.push({
+              id: createLogId(),
+              playerId: currentP.id,
+              playerName: currentP.name,
+              message: `Klinikai Audit & Akkreditáció: Kiváló pénzügyi helyzet (0 KK adósság)! Bónusz: +${bonus.toLocaleString()} KK.`,
+              timestamp: Date.now(),
+              type: 'money',
+            });
+          } else {
+            newLogs.push({
+              id: createLogId(),
+              playerId: currentP.id,
+              playerName: currentP.name,
+              message: 'Klinikai Audit: Fennálló banki tartozás miatt nem vagy jogosult a minőségi bónuszra.',
+              timestamp: Date.now(),
+              type: 'system',
+            });
+          }
+          break;
+        }
+      }
+      break;
+    }
+
+    case 'neutral':
+    default:
+      newLogs.push({
+        id: createLogId(),
+        playerId: currentP.id,
+        playerName: currentP.name,
+        message: `${tile.name}: Nyugodt kör, nincs kötelező kiadás.`,
+        timestamp: Date.now(),
+        type: 'system',
+      });
+      break;
+  }
+
+  return {
+    player: updatedP,
+    nextPhase,
+    drawnCard,
+    cardDeck: newDeck,
+    discardDeck: newDiscard,
+    extraRoll,
+    logs: newLogs,
+  };
+}
 
 export function useGameEngine() {
   const [gameState, setGameState] = useState<GameState>(createInitialState);
@@ -232,7 +532,8 @@ export function useGameEngine() {
     if (!activePlayer) return;
     if (gameState.phase !== 'roll') return;
     if (gameState.isRolling || gameState.winner) return;
-    if (hasRolledThisTurn && !extraRollAvailable) return;
+    const canRoll = !hasRolledThisTurn || extraRollAvailable || !!gameState.extraRollAvailable;
+    if (!canRoll) return;
 
     // Kockadobás (1 - 6)
     const roll = Math.floor(Math.random() * 6) + 1;
@@ -240,8 +541,9 @@ export function useGameEngine() {
     setGameState((prev) => ({ ...prev, isRolling: true }));
 
     // Rövid vizuális időzítés után léptetés
-    rollTimer.current = setTimeout(() => {
+rollTimer.current = setTimeout(() => {
       rollTimer.current = null;
+      let isExtraRoll = false;
       setGameState((prev) => {
         const currentP = prev.players[prev.activePlayerIndex];
         if (!currentP || prev.phase !== 'roll' || !prev.isRolling) return prev;
@@ -264,19 +566,16 @@ export function useGameEngine() {
         }
 
         const bankAccrual = accrueBankForMovement(currentP, roll, () => bankRandom);
-        const updatedPlayer: Player = {
+        const movedPlayer: Player = {
           ...bankAccrual.player,
           position: newPos,
           cash: newCash,
         };
 
-        const updatedPlayers = [...prev.players];
-        updatedPlayers[prev.activePlayerIndex] = updatedPlayer;
-
         const targetTile = getTileById(newPos);
         const tileName = targetTile ? targetTile.name : `Mező #${newPos}`;
 
-        const newLogs: GameLog[] = [
+        const moveLogs: GameLog[] = [
           {
             id: createLogId(),
             playerId: currentP.id,
@@ -288,7 +587,7 @@ export function useGameEngine() {
         ];
 
         if (bonusAdded > 0) {
-          newLogs.push({
+          moveLogs.push({
             id: createLogId(),
             playerId: currentP.id,
             playerName: currentP.name,
@@ -300,26 +599,49 @@ export function useGameEngine() {
 
         if (passedStart) {
           const bankLog = createBankReturnLog(bankAccrual);
-          if (bankLog) newLogs.push(bankLog);
+          if (bankLog) moveLogs.push(bankLog);
         }
+
+        // Automatikus mezővégrehajtás azonnal érkezéskor
+        const outcome = executeTileAction(
+          movedPlayer,
+          targetTile,
+          passedStart,
+          prev.cardDeck,
+          prev.discardDeck,
+        );
+
+        isExtraRoll = outcome.extraRoll;
+
+        const updatedPlayers = [...prev.players];
+        updatedPlayers[prev.activePlayerIndex] = outcome.player;
 
         return {
           ...prev,
           players: updatedPlayers,
           diceResult: roll,
           isRolling: false,
-          phase: 'tile_action',
+          phase: outcome.nextPhase,
+          drawnCard: outcome.drawnCard,
+          cardDeck: outcome.cardDeck,
+          discardDeck: outcome.discardDeck,
           roundPassBonusGranted: passedStart,
-          logs: [...newLogs, ...prev.logs],
+          extraRollAvailable: outcome.extraRoll,
+          logs: [...outcome.logs, ...moveLogs, ...prev.logs],
         };
       });
 
-      setHasRolledThisTurn(true);
-      if (extraRollAvailable) {
-        setExtraRollAvailable(false);
+      if (isExtraRoll) {
+        setExtraRollAvailable(true);
+        setHasRolledThisTurn(false);
+      } else {
+        setHasRolledThisTurn(true);
+        if (extraRollAvailable) {
+          setExtraRollAvailable(false);
+        }
       }
     }, 400);
-  }, [activePlayer, gameState.phase, gameState.isRolling, gameState.winner, hasRolledThisTurn, extraRollAvailable]);
+  }, [activePlayer, gameState.phase, gameState.isRolling, gameState.winner, gameState.extraRollAvailable, hasRolledThisTurn, extraRollAvailable]);
 
   /**
    * 3. Mező eseményének feldolgozása
@@ -331,267 +653,31 @@ export function useGameEngine() {
       if (!currentP) return prev;
 
       const tile = getTileById(currentP.position);
-      if (!tile) {
-        return { ...prev, phase: 'building' };
-      }
+      const outcome = executeTileAction(
+        currentP,
+        tile,
+        prev.roundPassBonusGranted,
+        prev.cardDeck,
+        prev.discardDeck,
+      );
 
-      const updatedP = { ...currentP };
-      const newLogs: GameLog[] = [];
-      let nextPhase: GamePhase = 'building';
-      let drawnCard: Card | null = null;
-      let newDeck = [...prev.cardDeck];
-      let newDiscard = [...prev.discardDeck];
-
-      switch (tile.type) {
-        case 'start': {
-          // Ha közvetlenül a START-ra érkezett és az áthaladáskor még nem kapott bónuszt ebben a lépésben
-          if (!prev.roundPassBonusGranted) {
-            updatedP.cash += GAME_CONSTANTS.START_PASS_BONUS;
-            newLogs.push({
-              id: createLogId(),
-              playerId: currentP.id,
-              playerName: currentP.name,
-              message: `Megérkezés a START mezőre! Fenntartási támogatás: +${GAME_CONSTANTS.START_PASS_BONUS.toLocaleString()} KK.`,
-              timestamp: Date.now(),
-              type: 'money',
-            });
-          }
-          break;
-        }
-
-        case 'income': {
-          const val = tile.value ?? 150_000;
-          updatedP.cash += val;
-          newLogs.push({
-            id: createLogId(),
-            playerId: currentP.id,
-            playerName: currentP.name,
-            message: `${tile.name}: Jóváírás +${val.toLocaleString()} KK.`,
-            timestamp: Date.now(),
-            type: 'money',
-          });
-          break;
-        }
-
-        case 'expense': {
-          const val = tile.value ?? 100_000;
-          // Mentesség ellenőrzése
-          const penaltyImmunityIndex = updatedP.activeBuffs.findIndex((b) => b.type === 'penalty_immunity');
-          if (penaltyImmunityIndex !== -1) {
-            const updatedBuffs = [...updatedP.activeBuffs];
-            updatedBuffs.splice(penaltyImmunityIndex, 1);
-            updatedP.activeBuffs = updatedBuffs;
-            newLogs.push({
-              id: createLogId(),
-              playerId: currentP.id,
-              playerName: currentP.name,
-              message: `Felelősségbiztosítási mentesség aktiválva! A ${val.toLocaleString()} KK kiadás elengedve.`,
-              timestamp: Date.now(),
-              type: 'money',
-            });
-          } else {
-            const { cashAfter, loanAmount } = calculateAutoLoan(updatedP.cash, val);
-            updatedP.cash = cashAfter;
-            if (loanAmount > 0) {
-              updatedP.debt += loanAmount;
-              newLogs.push({
-                id: createLogId(),
-                playerId: currentP.id,
-                playerName: currentP.name,
-                message: `Pénzhiány miatt automatikus bankhitel felvétele: +${loanAmount.toLocaleString()} KK.`,
-                timestamp: Date.now(),
-                type: 'money',
-              });
-            }
-            newLogs.push({
-              id: createLogId(),
-              playerId: currentP.id,
-              playerName: currentP.name,
-              message: `${tile.name}: Levonás -${val.toLocaleString()} KK.`,
-              timestamp: Date.now(),
-              type: 'money',
-            });
-          }
-          break;
-        }
-
-        case 'card': {
-          // Kártyahúzás logikája: ha elfogyott a 40 kártya, automatikusan újrakeverjük a discard paklit
-          if (newDeck.length === 0) {
-            newDeck = shuffleArray(newDiscard.length > 0 ? newDiscard : EVENT_CARDS.map((c) => c.id));
-            newDiscard = [];
-            newLogs.push({
-              id: createLogId(),
-              message: `Az eseménykártya pakli elfogyott, a felhasznált lapok újrakeverve!`,
-              timestamp: Date.now(),
-              type: 'system',
-            });
-          }
-
-          const drawnCardId = newDeck.shift()!;
-          newDiscard.push(drawnCardId);
-          drawnCard = EVENT_CARDS.find((c) => c.id === drawnCardId) ?? null;
-          nextPhase = 'card_modal';
-          break;
-        }
-
-        case 'purchase': {
-          // 15% beruházási kedvezmény buff hozzáadása a következő építésre
-          const discountBuff: ActiveBuff = {
-            id: `buff_${Date.now()}`,
-            name: 'Beszállítói Tender Kedvezmény',
-            description: '15% kedvezmény a legközelebbi építkezésre',
-            type: 'building_discount',
-            value: 15,
-            remainingTurns: 2,
-          };
-          updatedP.activeBuffs = [...updatedP.activeBuffs, discountBuff];
-          newLogs.push({
-            id: createLogId(),
-            playerId: currentP.id,
-            playerName: currentP.name,
-            message: `${tile.name}: 15% építkezési kedvezmény jóváírva a következő vásárlásodra!`,
-            timestamp: Date.now(),
-            type: 'build',
-          });
-          break;
-        }
-
-        case 'special': {
-          switch (tile.specialAction) {
-            case 'ambulance_speed':
-              setExtraRollAvailable(true);
-              nextPhase = 'roll';
-              newLogs.push({
-                id: createLogId(),
-                playerId: currentP.id,
-                playerName: currentP.name,
-                message: `Szirénázó Rohammentő: Azonnali újabb dobási lehetőséget kaptál ebben a körben!`,
-                timestamp: Date.now(),
-                type: 'move',
-              });
-              break;
-
-            case 'grant_fund': {
-              const grant = 200_000;
-              updatedP.cash += grant;
-              newLogs.push({
-                id: createLogId(),
-                playerId: currentP.id,
-                playerName: currentP.name,
-                message: `Egészségügyi Pályázati Alap támogatás: +${grant.toLocaleString()} KK kutatási forrás!`,
-                timestamp: Date.now(),
-                type: 'money',
-              });
-              break;
-            }
-
-            case 'medical_conference': {
-              const fee = 150_000;
-              updatedP.cash += fee;
-              newLogs.push({
-                id: createLogId(),
-                playerId: currentP.id,
-                playerName: currentP.name,
-                message: `Orvoskongresszus előadói tiszteletdíj: +${fee.toLocaleString()} KK.`,
-                timestamp: Date.now(),
-                type: 'money',
-              });
-              break;
-            }
-
-            case 'telemedicine': {
-              const builtCount = updatedP.builtElements.length;
-              const bonus = builtCount * 40_000;
-              if (bonus > 0) {
-                updatedP.cash += bonus;
-                newLogs.push({
-                  id: createLogId(),
-                  playerId: currentP.id,
-                  playerName: currentP.name,
-                  message: `Telemedicina jogdíjak (${builtCount} megépült részleg után): +${bonus.toLocaleString()} KK.`,
-                  timestamp: Date.now(),
-                  type: 'money',
-                });
-              } else {
-                newLogs.push({
-                  id: createLogId(),
-                  playerId: currentP.id,
-                  playerName: currentP.name,
-                  message: `Telemedicina hálózat: Még nincs megépült részleged a jogdíjak folyósításához.`,
-                  timestamp: Date.now(),
-                  type: 'system',
-                });
-              }
-              break;
-            }
-
-            case 'emergency_duty': {
-              const dutyBonus = 120_000;
-              updatedP.cash += dutyBonus;
-              newLogs.push({
-                id: createLogId(),
-                playerId: currentP.id,
-                playerName: currentP.name,
-                message: `Sürgősségi Készenléti Ügyelet pótlék: +${dutyBonus.toLocaleString()} KK.`,
-                timestamp: Date.now(),
-                type: 'money',
-              });
-              break;
-            }
-
-            case 'disaster_readiness': {
-              if (updatedP.debt === 0) {
-                const bonus = 100_000;
-                updatedP.cash += bonus;
-                newLogs.push({
-                  id: createLogId(),
-                  playerId: currentP.id,
-                  playerName: currentP.name,
-                  message: `Klinikai Audit & Akkreditáció: Kiváló pénzügyi helyzet (0 KK adósság)! Bónusz: +${bonus.toLocaleString()} KK.`,
-                  timestamp: Date.now(),
-                  type: 'money',
-                });
-              } else {
-                newLogs.push({
-                  id: createLogId(),
-                  playerId: currentP.id,
-                  playerName: currentP.name,
-                  message: `Klinikai Audit: Fennálló banki tartozás miatt nem vagy jogosult a minőségi bónuszra.`,
-                  timestamp: Date.now(),
-                  type: 'system',
-                });
-              }
-              break;
-            }
-          }
-          break;
-        }
-
-        case 'neutral':
-        default:
-          newLogs.push({
-            id: createLogId(),
-            playerId: currentP.id,
-            playerName: currentP.name,
-            message: `${tile.name}: Nyugodt kör, nincs kötelező kiadás.`,
-            timestamp: Date.now(),
-            type: 'system',
-          });
-          break;
+      if (outcome.extraRoll) {
+        setExtraRollAvailable(true);
+        setHasRolledThisTurn(false);
       }
 
       const updatedPlayers = [...prev.players];
-      updatedPlayers[prev.activePlayerIndex] = updatedP;
+      updatedPlayers[prev.activePlayerIndex] = outcome.player;
 
       return {
         ...prev,
         players: updatedPlayers,
-        phase: nextPhase,
-        drawnCard,
-        cardDeck: newDeck,
-        discardDeck: newDiscard,
-        logs: [...newLogs, ...prev.logs],
+        phase: outcome.nextPhase,
+        drawnCard: outcome.drawnCard,
+        cardDeck: outcome.cardDeck,
+        discardDeck: outcome.discardDeck,
+        extraRollAvailable: outcome.extraRoll,
+        logs: [...outcome.logs, ...prev.logs],
       };
     });
   }, []);
@@ -649,6 +735,7 @@ export function useGameEngine() {
 
         case 'extra_roll': {
           setExtraRollAvailable(true);
+          setHasRolledThisTurn(false);
           newLogs.push({
             id: createLogId(),
             playerId: currentP.id,
@@ -806,6 +893,7 @@ export function useGameEngine() {
         ...prev,
         players: updatedPlayers,
         phase: action.type === 'extra_roll' || extraRollAvailable ? 'roll' : 'building',
+        extraRollAvailable: action.type === 'extra_roll',
         drawnCard: null,
         roundPassBonusGranted: startBonusSettled,
         logs: [...newLogs, ...prev.logs],
@@ -1129,7 +1217,7 @@ export function useGameEngine() {
       };
       if (normalizedState.phase === 'roll') {
         setHasRolledThisTurn(false);
-        setExtraRollAvailable(false);
+setExtraRollAvailable(!!normalizedState.extraRollAvailable);
       } else if (normalizedState.phase === 'building' || normalizedState.phase === 'tile_action') {
         setHasRolledThisTurn(true);
       }

@@ -195,6 +195,7 @@ export interface GameState {
   logs: GameLog[];
   roundPassBonusGranted: boolean;  // START mező áthaladás egyszeri regisztrációja a lépésben
   builtThisTurn?: boolean;
+  extraRollAvailable?: boolean;    // Extra dobási jogosultság (pl. Szirénázó Rohammentő vagy Sürgősségi kártya)
 }
 
 // ==========================================
