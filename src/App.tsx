@@ -55,6 +55,19 @@ export function App() {
   const [isClinicOpen, setIsClinicOpen] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
+  const clinicModalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isClinicOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    clinicModalRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [isClinicOpen]);
 
   // Multiplayer and game mode state
   const [gameMode, setGameMode] = useState<'local' | 'online' | null>(null);
@@ -539,15 +552,27 @@ export function App() {
       {/* 4.3 Clinic Dashboard / Blueprint View */}
       {isClinicOpen && activePlayer && (
         <div className="clinic-modal-backdrop" onClick={() => setIsClinicOpen(false)}>
-          <div className="clinic-modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="clinic-modal-content" ref={clinicModalRef} role="dialog" aria-modal="true" aria-labelledby="clinic-modal-title" tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { e.stopPropagation(); setIsClinicOpen(false); }
+              if (e.key !== 'Tab') return;
+              const controls = clinicModalRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled)');
+              if (!controls?.length) return;
+              const first = controls[0];
+              const last = controls[controls.length - 1];
+              if (e.shiftKey && (document.activeElement === first || document.activeElement === clinicModalRef.current)) { e.preventDefault(); last.focus(); }
+              else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+            }}>
             <div className="clinic-modal-header">
               <div className="clinic-header-info">
-                <h2>{activePlayer.name} Klinikája</h2>
+                <h2 id="clinic-modal-title">{activePlayer.name} Klinikája</h2>
                 <span style={{ color: activePlayer.color }}>{activePlayer.avatarTitle}</span>
               </div>
               <button
                 type="button"
                 className="clinic-modal-close"
+                aria-label="Klinika bezárása"
                 onClick={() => setIsClinicOpen(false)}
               >
                 ✕
@@ -555,10 +580,10 @@ export function App() {
             </div>
             <ClinicDashboard
               player={activePlayer}
-              onBuyElement={engine.buyClinicElement}
+              onBuyElement={(elementId) => { if (isMyTurn) engine.buyClinicElement(elementId); }}
               canBuyCheck={engine.canBuyElement}
               hasBuiltThisTurn={engine.hasBuiltThisTurn}
-              isCurrentTurnActive={gameState.phase === 'building'}
+              isCurrentTurnActive={isMyTurn && gameState.phase === 'building'}
             />
           </div>
         </div>
