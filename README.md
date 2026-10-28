@@ -197,7 +197,14 @@ A hackathon bemutatók és a zsűrizés megkönnyítésére beépítettünk egy 
   - 📍 **Interaktív Mezőre Teleportálás:** Ha a Fejlesztői Mód aktív, a tábla bármelyik mezőjére rákattintva az aktív bábu azonnal odaugrik, kiváltva a mező hatását.
   - 🃏 **Kártyaválasztó Teszter:** Mind a 40 eseménykártya előnézete és azonnali felhúzása teszteléshez.
   - 🏆 **1-Kattintásos Győzelem:** Azonnali győzelmi állapot generálása a díjátadó és győzelmi animációk bemutatásához.
-  - 🔊 **Web Audio Szintetizátor Teszt:** A 4 egyedi szintetizált hanghatás külön-külön tesztelése és némítása.
+  - 🔊 **Web Audio Szintetizátor Teszt:** Mind a 7 egyedi szintetizált hanghatás külön-külön tesztelése és némítása:
+    - 🎲 **`dice` (Kockadobás):** Dinamikus kockapörgés és asztalon gurulás a dobási fázis alatt.
+    - 💰 **`money` (Bevétel / Kassza):** Fényes aranyérme és kasszagép csilingelés támogatások, START bónusz és bevételek jóváírásakor.
+    - ⚠️ **`penalty` (Kiadás / Bírság):** Tompa koppanás és lefelé lépdelő mélyebb moll hangok orvosi műhibák, adófizetés és bírságok levonásakor.
+    - 🏗️ **`build` (Részlegátadás):** Rezonáns szerkezeti koppanás és büszke C-dúr fanfár új klinikai osztály megvásárlásakor.
+    - 🚑 **`siren` (Rohammentő Sziréna):** Kétciklusos európai mentőautó váltókürt a 4-es mezőre („Szirénázó Rohammentő”) érkezéskor.
+    - 🃏 **`card` (Kártyahúzás):** Papírlap suhogása az eseménykártyák felhúzásakor és megnyitásakor.
+    - 🏆 **`victory` (Győzelmi Fanfár):** Ünnepélyes, rézfúvós hangulatú győzelmi dallam a játék megnyerésekor.
 
 ---
 
@@ -220,7 +227,7 @@ A játék felhasználói felülete asztali gépen, tableten és okostelefonon is
 - **React 19 & TypeScript:** Komponensalapú, szigorúan típusbiztos felületkezelés.
 - **Vite 8:** Másodperc alatti Hot Module Replacement (HMR) és optimalizált rollup kötegelés.
 - **Vanilla CSS Design System:** Modern sötét téma, glassmorphism effektek, fluid reszponzivitás külső nehézkes CSS keretrendszerek nélkül.
-- **Web Audio API:** Teljesen procedurális, dinamikusan szintetizált orvosi hangeffektek külső MP3 fájlok nélkül.
+- **Web Audio API:** 7 teljesen procedurális, dinamikusan szintetizált orvosi és játékmechanikai hangeffekt külső MP3 fájlok nélkül (0 KB letöltés, zéró adatforgalom, azonnali reakcióidő).
 - **Lucide Icons:** Letisztult orvosi és pénzügyi vektoros ikonográfia.
 
 ### Backend Réteg
@@ -316,7 +323,7 @@ npm run build
   - Játékmotor fázisátmenetek, kockadobás, mezőhatások és győzelmi feltételek.
   - Klinikai Bank: kamatszámítás, betételhelyezés, hitelfelvétel és törlesztési invariánsok.
   - AI Bot heurisztika: önálló döntéshozatal, részlegvásárlás és többlettőke-lekötés.
-  - Web Audio hangszintetizátor némítási és felhasználói interakciós zárai.
+  - Web Audio hangszintetizátor mind a 7 eljárási profilja, némítási állapota és felhasználói interakciós zárai.
   - WebSocket szobakezelés: szobakód-validáció, XSS szanitáció, 50 szobás plafon és visszacsatlakozási időzítők.
 - **ESLint:** 0 hiba, 0 figyelmeztetés.
 - **TypeScript:** Szigorú típusellenőrzés (`tsc -b`).
