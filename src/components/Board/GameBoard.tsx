@@ -193,6 +193,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 isRolling={isRolling}
                 diceResult={diceResult}
                 disabled={isMoving || isRolling || isRollDisabled}
+                hideButton={true}
                 buttonLabel={
                   isMoving
                     ? 'Lépkedés...'

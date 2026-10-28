@@ -193,7 +193,8 @@ export interface GameState {
   discardDeck: number[];           // Felhasznált lapok
   winner: Player | null;
   logs: GameLog[];
-  roundPassBonusGranted: boolean;  // START mező áthaladás egyszeri regisztrációja a lépésben
+  roundPassBonusGranted: boolean;
+  extraRollAvailable?: boolean;    // Extra dobási jogosultság (pl. Szirénázó Rohammentő vagy Sürgősségi kártya)  // START mező áthaladás egyszeri regisztrációja a lépésben
 }
 
 // ==========================================

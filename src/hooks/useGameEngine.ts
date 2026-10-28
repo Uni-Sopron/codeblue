@@ -83,6 +83,7 @@ const createInitialState = (): GameState => ({
   winner: null,
   logs: [],
   roundPassBonusGranted: false,
+  extraRollAvailable: false,
 });
 
 export function useGameEngine() {
@@ -224,7 +225,8 @@ export function useGameEngine() {
     if (!activePlayer) return;
     if (gameState.phase !== 'roll') return;
     if (gameState.isRolling || gameState.winner) return;
-    if (hasRolledThisTurn && !extraRollAvailable) return;
+    const canRoll = !hasRolledThisTurn || extraRollAvailable || !!gameState.extraRollAvailable;
+    if (!canRoll) return;
 
     // Kockadobás (1 - 6)
     const roll = Math.floor(Math.random() * 6) + 1;
@@ -301,6 +303,7 @@ export function useGameEngine() {
           isRolling: false,
           phase: 'tile_action',
           roundPassBonusGranted: passedStart,
+          extraRollAvailable: false,
           logs: [...newLogs, ...prev.logs],
         };
       });
@@ -310,7 +313,7 @@ export function useGameEngine() {
         setExtraRollAvailable(false);
       }
     }, 400);
-  }, [activePlayer, gameState.phase, gameState.isRolling, gameState.winner, hasRolledThisTurn, extraRollAvailable]);
+  }, [activePlayer, gameState.phase, gameState.isRolling, gameState.winner, gameState.extraRollAvailable, hasRolledThisTurn, extraRollAvailable]);
 
   /**
    * 3. Mező eseményének feldolgozása
@@ -452,6 +455,7 @@ export function useGameEngine() {
           switch (tile.specialAction) {
             case 'ambulance_speed':
               setExtraRollAvailable(true);
+              setHasRolledThisTurn(false);
               nextPhase = 'roll';
               newLogs.push({
                 id: createLogId(),
@@ -582,6 +586,7 @@ export function useGameEngine() {
         drawnCard,
         cardDeck: newDeck,
         discardDeck: newDiscard,
+        extraRollAvailable: tile.type === 'special' && tile.specialAction === 'ambulance_speed',
         logs: [...newLogs, ...prev.logs],
       };
     });
@@ -640,6 +645,7 @@ export function useGameEngine() {
 
         case 'extra_roll': {
           setExtraRollAvailable(true);
+          setHasRolledThisTurn(false);
           newLogs.push({
             id: createLogId(),
             playerId: currentP.id,
@@ -797,6 +803,7 @@ export function useGameEngine() {
         ...prev,
         players: updatedPlayers,
         phase: action.type === 'extra_roll' || extraRollAvailable ? 'roll' : 'building',
+        extraRollAvailable: action.type === 'extra_roll',
         drawnCard: null,
         roundPassBonusGranted: startBonusSettled,
         logs: [...newLogs, ...prev.logs],
@@ -1115,7 +1122,7 @@ export function useGameEngine() {
       if (normalizedState.phase === 'roll') {
         setHasRolledThisTurn(false);
         setHasBuiltThisTurn(false);
-        setExtraRollAvailable(false);
+        setExtraRollAvailable(!!normalizedState.extraRollAvailable);
       } else if (normalizedState.phase === 'building' || normalizedState.phase === 'tile_action') {
         setHasRolledThisTurn(true);
       }

@@ -639,7 +639,7 @@ export function App() {
                   !isMyTurn ||
                   gameState.phase !== 'roll' ||
                   gameState.isRolling ||
-                  (engine.hasRolledThisTurn && !engine.extraRollAvailable)
+                  (engine.hasRolledThisTurn && !engine.extraRollAvailable && !gameState.extraRollAvailable)
                 }
                 onTileClick={(tile) => {
                   if (activePlayer && isMyTurn) {
@@ -694,11 +694,17 @@ export function App() {
                     )}
 
                     {gameState.phase === 'roll' && (
-                      <div className="roll-hint-badge">
-                        <span>
-                          🎲 Nyomj <strong>Space</strong> billentyűt vagy kattints a fenti kockára a dobáshoz!
-                        </span>
-                      </div>
+                      <button
+                        type="button"
+                        className="action-btn-primary action-btn-roll"
+                        onClick={handleRollDice}
+                        disabled={gameState.isRolling || !isMyTurn}
+                        title="Kockadobás a lépéshez (Space billentyű vagy kattintás)"
+                      >
+                        <Play size={18} />
+                        <span>{gameState.isRolling ? 'Kockadobás...' : 'Kockadobás'}</span>
+                        <kbd className="space-key-hint">Space</kbd>
+                      </button>
                     )}
                   </>
                 )}

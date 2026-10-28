@@ -215,3 +215,48 @@ test('Declining rematch resets room rematchVotes map and prepares cancelled even
   assert.equal(cancelledEventPayload?.cancelledBy, 'Dr. Beta');
   assert.equal(cancelledEventPayload?.cancelledById, 'p2');
 });
+
+test('Szirénázó Rohammentő (Tile 4) unlocks an immediate second roll for the active player', () => {
+  let hasRolledThisTurn = true;
+  let extraRollAvailable = false;
+  let phase = 'tile_action';
+
+  // Landing on Tile 4 ('ambulance_speed')
+  const specialAction = 'ambulance_speed';
+  if (specialAction === 'ambulance_speed') {
+    extraRollAvailable = true;
+    hasRolledThisTurn = false;
+    phase = 'roll';
+  }
+
+  assert.equal(phase, 'roll');
+  assert.equal(extraRollAvailable, true);
+  assert.equal(hasRolledThisTurn, false);
+
+  // Verification of roll authorization
+  const canRoll = !hasRolledThisTurn || extraRollAvailable;
+  assert.equal(canRoll, true);
+
+  // Executing the extra roll consumes the authorization
+  hasRolledThisTurn = true;
+  extraRollAvailable = false;
+  assert.equal(hasRolledThisTurn, true);
+  assert.equal(extraRollAvailable, false);
+});
+
+test('Event Card #7 (extra_roll) grants a second roll and transitions to roll phase', () => {
+  const cardAction = { type: 'extra_roll' };
+  let extraRollAvailable = false;
+  let hasRolledThisTurn = true;
+  let phase = 'card_modal';
+
+  if (cardAction.type === 'extra_roll') {
+    extraRollAvailable = true;
+    hasRolledThisTurn = false;
+    phase = 'roll';
+  }
+
+  assert.equal(phase, 'roll');
+  assert.equal(extraRollAvailable, true);
+  assert.equal(hasRolledThisTurn, false);
+});

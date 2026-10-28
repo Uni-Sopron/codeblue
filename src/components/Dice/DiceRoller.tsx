@@ -8,6 +8,7 @@ interface DiceRollerProps {
   diceResult: number | null;
   disabled?: boolean;
   buttonLabel?: string;
+  hideButton?: boolean;
 }
 
 export const DiceRoller: React.FC<DiceRollerProps> = ({
@@ -16,6 +17,7 @@ export const DiceRoller: React.FC<DiceRollerProps> = ({
   diceResult,
   disabled = false,
   buttonLabel = 'Kockadobás',
+  hideButton = false,
 }) => {
   const [rotation, setRotation] = useState({ x: 0, y: 0 });
 
@@ -117,7 +119,7 @@ export const DiceRoller: React.FC<DiceRollerProps> = ({
       </div>
 
       {/* Action Button: only show when roll is available or while rolling */}
-      {!disabled || isRolling || diceResult === null ? (
+      {!hideButton && (!disabled || isRolling || diceResult === null) ? (
         <button
           type="button"
           className="dice-roll-button"

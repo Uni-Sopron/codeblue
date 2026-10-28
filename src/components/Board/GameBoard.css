@@ -26,6 +26,8 @@
   padding: 6px;
   box-sizing: border-box;
   position: relative;
+  transform: translateZ(0);
+  contain: layout;
 }
 
 .grid-tile-cell {
@@ -355,5 +357,18 @@
   }
   .landing-tile-desc {
     font-size: 0.7rem;
+  }
+}
+@media (max-width: 768px) {
+  .board-center-area {
+    backdrop-filter: none !important;
+  }
+  .center-landing-card {
+    backdrop-filter: none !important;
+    background: rgba(15, 23, 42, 0.96) !important;
+  }
+  .center-turn-card {
+    backdrop-filter: none !important;
+    background: rgba(15, 23, 42, 0.92) !important;
   }
 }
