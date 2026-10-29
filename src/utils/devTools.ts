@@ -1,3 +1,36 @@
+export const DEV_PASSWORD = 'codeblue112';
+export const DEV_STORAGE_KEY = 'codeblue.devUnlocked';
+
+export function checkDevPassword(attempt: string): boolean {
+  return attempt.trim().toLowerCase() === DEV_PASSWORD.toLowerCase();
+}
+
+export function isDevModeStored(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('dev') === '1' || params.get('demo') === '1' || params.get('dev') === DEV_PASSWORD) {
+      return true;
+    }
+    return window.sessionStorage.getItem(DEV_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setDevModeStored(unlocked: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (unlocked) {
+      window.sessionStorage.setItem(DEV_STORAGE_KEY, 'true');
+    } else {
+      window.sessionStorage.removeItem(DEV_STORAGE_KEY);
+    }
+  } catch {
+    // SessionStorage may fail in restricted/private browser mode
+  }
+}
+
 import type { GameState, PlayerId } from '../types/game.ts';
 import { GAME_CONSTANTS } from '../types/game.ts';
 import { EVENT_CARDS } from '../data/cards.ts';

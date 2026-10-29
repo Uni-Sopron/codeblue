@@ -1,5 +1,5 @@
 import React from 'react';
-import { RotateCcw, LogOut, Volume2, VolumeX, Wrench, X, ShieldAlert, Play } from 'lucide-react';
+import { RotateCcw, LogOut, Volume2, VolumeX, Wrench, X, ShieldAlert, Play, Lock } from 'lucide-react';
 import './GameMenuModal.css';
 
 interface GameMenuModalProps {
@@ -9,7 +9,10 @@ interface GameMenuModalProps {
   isHost: boolean;
   soundEnabled: boolean;
   onToggleSound: () => void;
+  isDevUnlocked: boolean;
+  onOpenDevAuth: () => void;
   onOpenDevPanel: () => void;
+  onLockDev?: () => void;
   onRestartMatch: () => void;
   onExitToMainMenu: () => void;
 }
@@ -21,7 +24,10 @@ export const GameMenuModal: React.FC<GameMenuModalProps> = ({
   isHost,
   soundEnabled,
   onToggleSound,
+  isDevUnlocked,
+  onOpenDevAuth,
   onOpenDevPanel,
+  onLockDev,
   onRestartMatch,
   onExitToMainMenu,
 }) => {
@@ -38,60 +44,70 @@ export const GameMenuModal: React.FC<GameMenuModalProps> = ({
             <span className="game-menu-badge">✚ Menü</span>
             <h2 className="game-menu-title">CodeBlue Magánklinika</h2>
             <p className="game-menu-subtitle">
-              {isOnline ? (isHost ? 'Online Szoba (Szobagazda)' : 'Online Szoba (Vendég)') : 'Helyi Játékmenet'}
+              {isOnline ? 'Multiplayer Mérkőzés' : 'Helyi Játékmenet'}
             </p>
           </div>
-          <button type="button" className="game-menu-close-btn" onClick={onClose} aria-label="Bezárás">
+          <button
+            type="button"
+            className="game-menu-close"
+            onClick={onClose}
+            aria-label="Menü bezárása"
+          >
             <X size={20} />
           </button>
         </div>
 
         {/* Menu Actions List */}
-        <div className="game-menu-items">
-          {/* 1. Resume */}
-          <button
-            type="button"
-            className="game-menu-item item-resume"
-            onClick={onClose}
-          >
-            <div className="menu-item-icon icon-resume">
-              <Play size={20} />
-            </div>
-            <div className="menu-item-content">
-              <span className="menu-item-title">Vissza a Játékhoz</span>
-              <span className="menu-item-desc">Játék folytatása a jelenlegi körben</span>
-            </div>
-          </button>
+        <div className="game-menu-body">
+          {/* 1. Host Restart (Only for Host or Local) */}
+          {(isHost || !isOnline) && (
+            <button
+              type="button"
+              className="game-menu-item item-restart"
+              onClick={() => {
+                onRestartMatch();
+                onClose();
+              }}
+            >
+              <div className="menu-item-icon icon-restart">
+                {isOnline ? <Play size={20} /> : <RotateCcw size={20} />}
+              </div>
+              <div className="menu-item-content">
+                <span className="menu-item-title">
+                  {isOnline ? 'Új meccs kezdeményezése' : 'Mérkőzés Újraindítása'}
+                </span>
+                <span className="menu-item-desc">
+                  {isOnline
+                    ? 'Új meccs szavazás indítása az aktuális szobában'
+                    : 'A tábla és a pénztárcák alaphelyzetbe állítása'}
+                </span>
+              </div>
+            </button>
+          )}
 
-          {/* 2. Restart Match (In-Place) */}
-          <button
-            type="button"
-            className="game-menu-item item-restart"
-            onClick={() => {
-              onRestartMatch();
-              onClose();
-            }}
-          >
-            <div className="menu-item-icon icon-restart">
-              <RotateCcw size={20} />
-            </div>
-            <div className="menu-item-content">
-              <span className="menu-item-title">
-                {isOnline
-                  ? isHost
-                    ? 'Új Meccs Kezdeményezése (Közös Újraindítás)'
-                    : 'Új Meccs Kérése'
-                  : 'Játék Újraindítása (Azonnali új meccs)'}
-              </span>
-              <span className="menu-item-desc">
-                {isOnline
-                  ? 'A jelenlegi szobában új 1. kör indul az orvosokkal (nem lép ki a menübe)'
-                  : 'A táblán új meccs indul 1 500 000 KK tőkével, a kiválasztott orvosokkal'}
-              </span>
-            </div>
-          </button>
+          {/* 2. Client Rematch Prompt (If in online game as guest) */}
+          {!isHost && isOnline && (
+            <button
+              type="button"
+              className="game-menu-item item-restart"
+              onClick={() => {
+                onRestartMatch();
+                onClose();
+              }}
+            >
+              <div className="menu-item-icon icon-restart">
+                <RotateCcw size={20} />
+              </div>
+              <div className="menu-item-content">
+                <span className="menu-item-title">Visszavágó Kérése</span>
+                <span className="menu-item-desc">
+                  Szavazz az új meccs elindítására a szobagazdánál
+                </span>
+              </div>
+            </button>
+          )}
 
-          {/* 3. Audio Toggle */}
+          {/* 3. Audio / Sound Toggle */}
           <button
             type="button"
             className="game-menu-item"
@@ -109,22 +125,61 @@ export const GameMenuModal: React.FC<GameMenuModalProps> = ({
           </button>
 
           {/* 4. Jury / Dev Panel */}
-          <button
-            type="button"
-            className="game-menu-item"
-            onClick={() => {
-              onOpenDevPanel();
-              onClose();
-            }}
-          >
-            <div className="menu-item-icon icon-dev">
-              <Wrench size={20} />
-            </div>
-            <div className="menu-item-content">
-              <span className="menu-item-title">Fejlesztői Tesztpanel</span>
-              <span className="menu-item-desc">Teleportálás, kártyahúzás és egyenleg állítás</span>
-            </div>
-          </button>
+          {isDevUnlocked ? (
+            <>
+              <button
+                type="button"
+                className="game-menu-item"
+                onClick={() => {
+                  onOpenDevPanel();
+                  onClose();
+                }}
+              >
+                <div className="menu-item-icon icon-dev">
+                  <Wrench size={20} />
+                </div>
+                <div className="menu-item-content">
+                  <span className="menu-item-title">Fejlesztői Tesztpanel</span>
+                  <span className="menu-item-desc">Teleportálás, kártyahúzás és egyenleg állítás</span>
+                </div>
+              </button>
+              {onLockDev && (
+                <button
+                  type="button"
+                  className="game-menu-item"
+                  onClick={() => {
+                    onLockDev();
+                    onClose();
+                  }}
+                >
+                  <div className="menu-item-icon icon-neutral">
+                    <Lock size={20} />
+                  </div>
+                  <div className="menu-item-content">
+                    <span className="menu-item-title">Fejlesztői Mód Zárolása</span>
+                    <span className="menu-item-desc">Jelszavas védelem visszaállítása és gomb elrejtése</span>
+                  </div>
+                </button>
+              )}
+            </>
+          ) : (
+            <button
+              type="button"
+              className="game-menu-item"
+              onClick={() => {
+                onClose();
+                onOpenDevAuth();
+              }}
+            >
+              <div className="menu-item-icon icon-neutral">
+                <Lock size={20} />
+              </div>
+              <div className="menu-item-content">
+                <span className="menu-item-title">Fejlesztői Mód feloldása</span>
+                <span className="menu-item-desc">Jelszóval védett tesztpanel és szimuláció</span>
+              </div>
+            </button>
+          )}
 
           {/* 5. Exit to Main Menu */}
           <button
@@ -142,24 +197,21 @@ export const GameMenuModal: React.FC<GameMenuModalProps> = ({
               <span className="menu-item-title">Kilépés a Főmenübe</span>
               <span className="menu-item-desc">
                 {isOnline
-                  ? 'Szoba elhagyása és visszatérés a többjátékos lobbyba'
-                  : 'Játék befejezése és visszalépés a beállításokhoz'}
+                  ? 'Kilépés a többjátékos szobából és a játék elhagyása'
+                  : 'Aktuális játszma befejezése'}
               </span>
             </div>
           </button>
         </div>
 
-        {/* Footer */}
-        <div className="game-menu-footer">
-          <div className="game-menu-tip">
-            <ShieldAlert size={14} className="shrink-0 text-sky-400" />
-            <span>Az újraindítás helyben történik, a főmenübe való kilépéshez válaszd a Kilépést.</span>
+        {/* Footer Warning for Online games */}
+        {isOnline && (
+          <div className="game-menu-footer">
+            <ShieldAlert size={14} className="footer-warn-icon" />
+            <span>A kilépéssel az orvosod státusza inaktívvá válik a szobában.</span>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
 };
-
-export default GameMenuModal;
-

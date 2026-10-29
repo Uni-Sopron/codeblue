@@ -21,7 +21,7 @@
 11. [Technológiai Stack és Architektúra](#11-technológiai-stack-és-architektúra)
 12. [Telepítés és Helyi Futtatás](#12-telepítés-és-helyi-futtatás)
 13. [Docker és Éles Üzembe Helyezés (OCI)](#13-docker-és-éles-üzembe-helyezés-oci)
-14. [Tesztelés és Kódminőség (152 Teszt)](#14-tesztelés-és-kódminőség-152-teszt)
+14. [Tesztelés és Kódminőség (154 Teszt)](#14-tesztelés-és-kódminőség-154-teszt)
 15. [Készítők és Licenc](#15-készítők-és-licenc)
 
 ---
@@ -189,22 +189,34 @@ A fejléc **„Bank”** gombjával elérhető a **Klinikai Bank** központi fel
 
 ## 9. Fejlesztői Mód (DevTools Tesztpanel)
 
-A hackathon bemutatók és a zsűrizés megkönnyítésére beépítettünk egy diszkrét, de minden részletre kiterjedő **Fejlesztői Mód** tesztpanelt:
+A hackathon bemutatók és a zsűrizés megkönnyítésére beépítettünk egy diszkrét, de minden részletre kiterjedő **Fejlesztői Mód** tesztpanelt. A normál játékosok elől a felső navigációs sávban alapesetben **rejtve marad a sárga Fejlesztői Mód gomb**, így nem zavarja az éles játékélményt.
 
-- **Megnyitás:** A felső fejléc sárga kulcs ikonjára kattintva (`Fejlesztői Mód`), vagy az URL-ben `?demo=1` paraméterrel.
-- **Főbb Eszközök:**
-  - 💰 **Tőke & Hitel Testre Szabása:** Bármelyik orvos pénzének azonnali növelése vagy csökkentése.
-  - 📍 **Interaktív Mezőre Teleportálás:** Ha a Fejlesztői Mód aktív, a tábla bármelyik mezőjére rákattintva az aktív bábu azonnal odaugrik, kiváltva a mező hatását.
-  - 🃏 **Kártyaválasztó Teszter:** Mind a 40 eseménykártya előnézete és azonnali felhúzása teszteléshez.
-  - 🏆 **1-Kattintásos Győzelem:** Azonnali győzelmi állapot generálása a díjátadó és győzelmi animációk bemutatásához.
-  - 🔊 **Web Audio Szintetizátor Teszt:** Mind a 7 egyedi szintetizált hanghatás külön-külön tesztelése és némítása:
-    - 🎲 **`dice` (Kockadobás):** Dinamikus kockapörgés és asztalon gurulás a dobási fázis alatt.
-    - 💰 **`money` (Bevétel / Kassza):** Fényes aranyérme és kasszagép csilingelés támogatások, START bónusz és bevételek jóváírásakor.
-    - ⚠️ **`penalty` (Kiadás / Bírság):** Tompa koppanás és lefelé lépdelő mélyebb moll hangok orvosi műhibák, adófizetés és bírságok levonásakor.
-    - 🏗️ **`build` (Részlegátadás):** Rezonáns szerkezeti koppanás és büszke C-dúr fanfár új klinikai osztály megvásárlásakor.
-    - 🚑 **`siren` (Rohammentő Sziréna):** Kétciklusos európai mentőautó váltókürt a 4-es mezőre („Szirénázó Rohammentő”) érkezéskor.
-    - 🃏 **`card` (Kártyahúzás):** Papírlap suhogása az eseménykártyák felhúzásakor és megnyitásakor.
-    - 🏆 **`victory` (Győzelmi Fanfár):** Ünnepélyes, rézfúvós hangulatú győzelmi dallam a játék megnyerésekor.
+### 🔐 Jelszavas Feloldás (`codeblue112`)
+
+A tesztpanel és a fejléc gombjának feloldásához a **`codeblue112`** biztonsági jelszó szükséges.
+
+- **Előhívási Módok:**
+  - 📋 **A Menüből (☰ Menü):** A „Fejlesztői Mód feloldása” menüpontra kattintva megnyílik a jelszóbekérő modális ablak.
+  - 📱 **Mobil Easter Egg (5× Logó Érintés):** A bal felső `+ CodeBlue Magánklinika` logóra 5-ször gyorsan egymás után rákattintva vagy rákoppintva azonnal előugrik a jelszóablak (az operációs rendszerek rejtett fejlesztői beállításaihoz hasonlóan).
+  - ⌨️ **Billentyűparancs (Asztali gép):** A `Ctrl + Shift + D` vagy `F2` billentyűkombináció lenyomásával közvetlenül elérhető.
+  - 🔗 **Közvetlen Zsűri Link (URL paraméter):** A cím végére fűzött `?dev=codeblue112`, `?dev=1` vagy `?demo=1` paraméterrel automatikusan, jelszókérés nélkül feloldva indul a tesztkörnyezet.
+- **Munkamenet Megőrzése & Zárolás:**
+  A sikeres feloldás megmarad az adott böngészőfül munkamenetében (`sessionStorage`), így az oldal újratöltésekor sem kell újra begépelni. A ☰ Menüben bármikor vissza is zárolható.
+
+### 🛠️ Főbb Fejlesztői Eszközök
+
+- 💰 **Tőke & Hitel Testre Szabása:** Bármelyik orvos pénzének azonnali növelése vagy csökkentése.
+- 📍 **Interaktív Mezőre Teleportálás:** Ha a Fejlesztői Mód aktív, a tábla bármelyik mezőjére rákattintva az aktív bábu azonnal odaugrik, kiváltva a mező hatását.
+- 🃏 **Kártyaválasztó Teszter:** Mind a 40 eseménykártya előnézete és azonnali felhúzása teszteléshez.
+- 🏆 **1-Kattintásos Győzelem:** Azonnali győzelmi állapot generálása a díjátadó és győzelmi animációk bemutatásához.
+- 🔊 **Web Audio Szintetizátor Teszt:** Mind a 7 egyedi szintetizált hanghatás külön-külön tesztelése és némítása:
+  - 🎲 **`dice` (Kockadobás):** Dinamikus kockapörgés és asztalon gurulás a dobási fázis alatt.
+  - 💰 **`money` (Bevétel / Kassza):** Fényes aranyérme és kasszagép csilingelés támogatások, START bónusz és bevételek jóváírásakor.
+  - ⚠️ **`penalty` (Kiadás / Bírság):** Tompa koppanás és lefelé lépdelő mélyebb moll hangok orvosi műhibák, adófizetés és bírságok levonásakor.
+  - 🏗️ **`build` (Részlegátadás):** Rezonáns szerkezeti koppanás és büszke C-dúr fanfár új klinikai osztály megvásárlásakor.
+  - 🚑 **`siren` (Rohammentő Sziréna):** Kétciklusos európai mentőautó váltókürt a 4-es mezőre („Szirénázó Rohammentő”) érkezéskor.
+  - 🃏 **`card` (Kártyahúzás):** Papírlap suhogása az eseménykártyák felhúzásakor és megnyitásakor.
+  - 🏆 **`victory` (Győzelmi Fanfár):** Ünnepélyes, rézfúvós hangulatú győzelmi dallam a játék megnyerésekor.
 
 ---
 
@@ -302,7 +314,7 @@ A backend konténer a 3001-es porton indul el, és közvetlenül illeszkedik a m
 
 ---
 
-## 14. Tesztelés és Kódminőség (152 Teszt)
+## 14. Tesztelés és Kódminőség (154 Teszt)
 
 A projekt a Node.js beépített natív tesztfuttatóját (`node --test`) használja, amely villámgyorsan, külső nehézkes könyvtárak nélkül futtat le **152 kiterjedt egységtesztet**:
 
@@ -319,11 +331,12 @@ npm run build
 
 ### ✅ Tesztelési Lefedettség
 
-- **152 / 152 automatizált teszt sikeres (0 hiba):**
+- **154 / 154 automatizált teszt sikeres (0 hiba):**
   - Játékmotor fázisátmenetek, kockadobás, mezőhatások és győzelmi feltételek.
   - Klinikai Bank: kamatszámítás, betételhelyezés, hitelfelvétel és törlesztési invariánsok.
   - AI Bot heurisztika: önálló döntéshozatal, részlegvásárlás és többlettőke-lekötés.
   - Web Audio hangszintetizátor mind a 7 eljárási profilja, némítási állapota és felhasználói interakciós zárai.
+  - Fejlesztői Mód biztonsági jelszavas védelem (`codeblue112`), URL override és munkamenet-tárolás tesztjei.
   - WebSocket szobakezelés: szobakód-validáció, XSS szanitáció, 50 szobás plafon és visszacsatlakozási időzítők.
 - **ESLint:** 0 hiba, 0 figyelmeztetés.
 - **TypeScript:** Szigorú típusellenőrzés (`tsc -b`).

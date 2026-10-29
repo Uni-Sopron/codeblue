@@ -5,7 +5,15 @@ import { CLINIC_ELEMENTS } from '../src/data/clinicElements.ts';
 import { BOARD_TILES } from '../src/data/tiles.ts';
 import { GAME_CONSTANTS } from '../src/types/game.ts';
 import type { GameState, PlayerId } from '../src/types/game.ts';
-import { applyDevAction, canUseDevTools } from '../src/utils/devTools.ts';
+import {
+  applyDevAction,
+  canUseDevTools,
+  checkDevPassword,
+  isDevModeStored,
+  setDevModeStored,
+  DEV_PASSWORD,
+  DEV_STORAGE_KEY,
+} from '../src/utils/devTools.ts';
 import type { DevAction } from '../src/utils/devTools.ts';
 
 function deepFreeze<T>(value: T): T {
@@ -225,4 +233,66 @@ test('all commands are blocked during setup, rolling, pending events and game ov
   }
   assert.equal(canUseDevTools(createState({ phase: 'roll' })), true);
   assert.equal(canUseDevTools(createState({ phase: 'building' })), true);
+});
+
+test('checkDevPassword validates codeblue112 case-insensitively and trims whitespace', () => {
+  assert.equal(DEV_PASSWORD, 'codeblue112');
+  assert.equal(checkDevPassword('codeblue112'), true);
+  assert.equal(checkDevPassword('CodeBlue112'), true);
+  assert.equal(checkDevPassword('  codeblue112  '), true);
+  assert.equal(checkDevPassword('CODEBLUE112'), true);
+  assert.equal(checkDevPassword(''), false);
+  assert.equal(checkDevPassword('wrong'), false);
+  assert.equal(checkDevPassword('codeblue'), false);
+  assert.equal(checkDevPassword('112'), false);
+});
+
+test('isDevModeStored and setDevModeStored handle storage and URL query flags safely', () => {
+  // 1. Without window (Node.js test environment)
+  assert.equal(isDevModeStored(), false);
+  assert.doesNotThrow(() => setDevModeStored(true));
+  assert.doesNotThrow(() => setDevModeStored(false));
+
+  // 2. Mocking browser window and sessionStorage
+  const storage = new Map<string, string>();
+  const originalWindow = (globalThis as unknown as { window?: unknown }).window;
+
+  (globalThis as unknown as { window: unknown }).window = {
+    location: { search: '' },
+    sessionStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    },
+  };
+
+  try {
+    assert.equal(isDevModeStored(), false);
+    setDevModeStored(true);
+    assert.equal(storage.get(DEV_STORAGE_KEY), 'true');
+    assert.equal(isDevModeStored(), true);
+
+    setDevModeStored(false);
+    assert.equal(storage.has(DEV_STORAGE_KEY), false);
+    assert.equal(isDevModeStored(), false);
+
+    // URL parameter overrides
+    ((globalThis as unknown as { window: { location: { search: string } } }).window).location.search = '?dev=1';
+    assert.equal(isDevModeStored(), true);
+
+    ((globalThis as unknown as { window: { location: { search: string } } }).window).location.search = '?demo=1';
+    assert.equal(isDevModeStored(), true);
+
+    ((globalThis as unknown as { window: { location: { search: string } } }).window).location.search = '?dev=codeblue112';
+    assert.equal(isDevModeStored(), true);
+
+    ((globalThis as unknown as { window: { location: { search: string } } }).window).location.search = '?other=test';
+    assert.equal(isDevModeStored(), false);
+  } finally {
+    if (originalWindow !== undefined) {
+      (globalThis as unknown as { window: unknown }).window = originalWindow;
+    } else {
+      delete (globalThis as unknown as { window?: unknown }).window;
+    }
+  }
 });

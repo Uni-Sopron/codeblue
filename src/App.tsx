@@ -40,6 +40,8 @@ import { ConfirmExitModal } from './components/Modals/ConfirmExitModal.tsx';
 import { GameMenuModal } from './components/Modals/GameMenuModal.tsx';
 import { RematchPromptModal } from './components/Modals/RematchPromptModal.tsx';
 import { DevPanel } from './components/DevTools/DevPanel.tsx';
+import { DevAuthModal } from './components/Modals/DevAuthModal.tsx';
+import { isDevModeStored, setDevModeStored } from './utils/devTools.ts';
 import './App.css';
 
 const PHASE_LABELS: Record<GamePhase, string> = {
@@ -62,8 +64,44 @@ export function App() {
   // Modal and panel visibility states
   const [isClinicOpen, setIsClinicOpen] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(false);
+  const [isDevUnlocked, setIsDevUnlocked] = useState(isDevModeStored);
+  const [isDevAuthOpen, setIsDevAuthOpen] = useState(false);
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
   const clinicModalRef = useRef<HTMLDivElement>(null);
+  const logoClickRef = useRef<{ count: number; lastTime: number }>({ count: 0, lastTime: 0 });
+
+  const handleLogoClick = () => {
+    const now = Date.now();
+    if (now - logoClickRef.current.lastTime > 1500) {
+      logoClickRef.current = { count: 1, lastTime: now };
+    } else {
+      logoClickRef.current.count += 1;
+      logoClickRef.current.lastTime = now;
+      if (logoClickRef.current.count >= 5) {
+        logoClickRef.current.count = 0;
+        if (!isDevUnlocked) {
+          setIsDevAuthOpen(true);
+        } else {
+          setIsDevPanelOpen((prev) => !prev);
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleDevShortcut = (e: KeyboardEvent) => {
+      if ((e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) || e.key === 'F2') {
+        e.preventDefault();
+        if (!isDevUnlocked) {
+          setIsDevAuthOpen(true);
+        } else {
+          setIsDevPanelOpen((prev) => !prev);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleDevShortcut);
+    return () => window.removeEventListener('keydown', handleDevShortcut);
+  }, [isDevUnlocked]);
 
   useEffect(() => {
     if (!isClinicOpen) return;
@@ -509,7 +547,14 @@ export function App() {
       {/* ======================================================== */}
       <header className="app-header">
         <div className="header-left">
-          <div className="brand-logo">
+          <div
+            className="brand-logo"
+            onClick={handleLogoClick}
+            style={{ cursor: 'pointer' }}
+            title="CodeBlue Magánklinika"
+            role="button"
+            tabIndex={0}
+          >
             <span className="brand-icon">✚</span>
             <div className="brand-text">
               <span className="brand-title">CodeBlue</span>
@@ -581,15 +626,17 @@ export function App() {
               {audio.soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
             </button>
 
-            <button
-              type="button"
-              className={`header-btn btn-dev ${isDevPanelOpen ? 'btn-active' : ''}`}
-              onClick={() => setIsDevPanelOpen((prev) => !prev)}
-              title="Fejlesztői bemutató és tesztpanel"
-            >
-              <Wrench size={16} />
-              <span>Fejlesztői Mód</span>
-            </button>
+            {isDevUnlocked && (
+              <button
+                type="button"
+                className={`header-btn btn-dev ${isDevPanelOpen ? 'btn-active' : ''}`}
+                onClick={() => setIsDevPanelOpen((prev) => !prev)}
+                title="Fejlesztői bemutató és tesztpanel"
+              >
+                <Wrench size={16} />
+                <span>Fejlesztői Mód</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -963,7 +1010,19 @@ export function App() {
         isHost={gameMode !== 'online' || isOnlineHost}
         soundEnabled={audio.soundEnabled}
         onToggleSound={() => audio.setSoundEnabled(!audio.soundEnabled)}
+        isDevUnlocked={isDevUnlocked}
+        onOpenDevAuth={() => setIsDevAuthOpen(true)}
         onOpenDevPanel={() => setIsDevPanelOpen(true)}
+        onLockDev={() => {
+          setIsDevUnlocked(false);
+          setDevModeStored(false);
+          setIsDevPanelOpen(false);
+          setToastMessage({
+            id: Date.now(),
+            text: '🔒 Fejlesztői Mód zárolva.',
+            type: 'info',
+          });
+        }}
         onRestartMatch={() => {
           if (gameMode === 'online' && onlineRoom) {
             multiplayerService.voteRematch(onlineRoom.code, true);
@@ -1041,8 +1100,25 @@ export function App() {
         }}
       />
 
+      {/* 4.4 Dev Auth Modal */}
+      <DevAuthModal
+        isOpen={isDevAuthOpen}
+        onClose={() => setIsDevAuthOpen(false)}
+        onSuccess={() => {
+          setIsDevUnlocked(true);
+          setDevModeStored(true);
+          setIsDevPanelOpen(true);
+          audio.previewSound('build');
+          setToastMessage({
+            id: Date.now(),
+            text: '🔓 Fejlesztői Mód sikeresen feloldva!',
+            type: 'info',
+          });
+        }}
+      />
+
       {/* 4.5 Jury DevTools Panel */}
-      {isDevPanelOpen && (
+      {isDevUnlocked && isDevPanelOpen && (
         <DevPanel
           gameState={gameState}
           onAdjustCash={engine.devAdjustCash}
