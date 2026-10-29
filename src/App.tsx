@@ -133,6 +133,7 @@ export function App() {
   const [spectatorCount, setSpectatorCount] = useState(0);
   const [areBotsPaused, setAreBotsPaused] = useState(false);
   const [rematchVotes, setRematchVotes] = useState<Record<string, boolean>>({});
+  const [offlineTimers, setOfflineTimers] = useState<Record<string, number>>({});
   const [turnTimeoutRemaining, setTurnTimeoutRemaining] = useState<number | null>(null);
   const [turnTimeoutPlayerId, setTurnTimeoutPlayerId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ id: number; text: string; type: 'info' | 'warning' | 'success' } | null>(null);
@@ -306,13 +307,17 @@ export function App() {
       }));
 
       if (timeoutSeconds) {
+        setOfflineTimers((prev) => ({
+          ...prev,
+          [playerId]: timeoutSeconds,
+        }));
         setTurnTimeoutRemaining(timeoutSeconds);
         setTurnTimeoutPlayerId(playerId);
       }
 
       setToastMessage({
         id: Date.now(),
-        text: `⚠️ ${playerName} kapcsolata megszakadt.${timeoutSeconds ? ` Körátadás ${timeoutSeconds} mp múlva.` : ''}`,
+        text: `⚠️ ${playerName} kapcsolata megszakadt.${timeoutSeconds ? ` Offline limit: ${timeoutSeconds} mp.` : ''}`,
         type: 'warning',
       });
     };
@@ -332,6 +337,11 @@ export function App() {
         ),
       }));
 
+      setOfflineTimers((prev) => {
+        const next = { ...prev };
+        delete next[playerId];
+        return next;
+      });
       setTurnTimeoutRemaining(null);
       setTurnTimeoutPlayerId(null);
 
@@ -395,6 +405,7 @@ export function App() {
       setIsGameMenuOpen(false);
       setIsConfirmExitOpen(false);
       setRematchRequester(null);
+      setOfflineTimers({});
       setTurnTimeoutRemaining(null);
       setTurnTimeoutPlayerId(null);
       setOnlineRoom(resetRoom);
@@ -415,6 +426,11 @@ export function App() {
       playerName: string;
       reason?: string;
     }) => {
+      setOfflineTimers((prev) => {
+        const next = { ...prev };
+        delete next[playerId];
+        return next;
+      });
       setTurnTimeoutRemaining(null);
       setTurnTimeoutPlayerId(null);
       isRemoteUpdateRef.current = true;
@@ -433,11 +449,19 @@ export function App() {
 
     const handleTurnAutoPassed = ({
       gameState: updatedState,
+      eliminatedPlayerId,
     }: {
       newActivePlayerIndex: number;
       gameState: GameState;
       eliminatedPlayerId?: string;
     }) => {
+      if (eliminatedPlayerId) {
+        setOfflineTimers((prev) => {
+          const next = { ...prev };
+          delete next[eliminatedPlayerId];
+          return next;
+        });
+      }
       setTurnTimeoutRemaining(null);
       setTurnTimeoutPlayerId(null);
       if (updatedState) {
@@ -448,6 +472,28 @@ export function App() {
         id: Date.now(),
         text: '⏱️ Az inaktív játékos köre átadásra került.',
         type: 'info',
+      });
+    };
+
+    const handleRoomClosed = ({
+      message,
+    }: {
+      reason?: string;
+      message?: string;
+    }) => {
+      setOnlineRoom(null);
+      setMyRemotePlayer(null);
+      setIsSpectator(false);
+      setSpectatorCount(0);
+      setOfflineTimers({});
+      setTurnTimeoutRemaining(null);
+      setTurnTimeoutPlayerId(null);
+      engine.resetGame();
+      setGameMode(null);
+      setToastMessage({
+        id: Date.now(),
+        text: message || 'A szoba bezárt, mert minden játékos kiszállt.',
+        type: 'warning',
       });
     };
 
@@ -474,6 +520,7 @@ export function App() {
     socket.on('room:game_reset', handleGameReset);
     socket.on('turn:auto_passed', handleTurnAutoPassed);
     socket.on('room:player_left', handlePlayerLeft);
+    socket.on('room:closed', handleRoomClosed);
     const unsubscribeSpectatorCount = multiplayerService.subscribeSpectatorCount((count) => {
       setSpectatorCount(count);
     });
@@ -493,8 +540,9 @@ export function App() {
       socket.off('room:game_reset', handleGameReset);
       socket.off('turn:auto_passed', handleTurnAutoPassed);
       socket.off('room:player_left', handlePlayerLeft);
+      socket.off('room:closed', handleRoomClosed);
     };
-  }, [startGame, setFullGameState]);
+  }, [startGame, setFullGameState, engine]);
 
   // Sync state to other players when a local player mutates gameState
   useEffect(() => {
@@ -507,14 +555,29 @@ export function App() {
     }
   }, [gameState, gameMode, onlineRoomCode, isSpectator]);
 
-  // Turn timeout countdown timer
+  // Turn timeout countdown timer & per-player offline countdowns
   useEffect(() => {
-    if (turnTimeoutRemaining === null || turnTimeoutRemaining <= 0) return;
+    const hasActiveTimers = Object.values(offlineTimers).some((sec) => sec > 0);
+    if (!hasActiveTimers && (turnTimeoutRemaining === null || turnTimeoutRemaining <= 0)) return;
+
     const timer = setInterval(() => {
       setTurnTimeoutRemaining((prev) => (prev && prev > 1 ? prev - 1 : null));
+      setOfflineTimers((prev) => {
+        let changed = false;
+        const next: Record<string, number> = {};
+        for (const [id, sec] of Object.entries(prev)) {
+          if (sec > 1) {
+            next[id] = sec - 1;
+            changed = true;
+          } else if (sec === 1) {
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
     }, 1000);
     return () => clearInterval(timer);
-  }, [turnTimeoutRemaining]);
+  }, [offlineTimers, turnTimeoutRemaining]);
 
   // Toast auto-dismiss after 4.5 seconds
   useEffect(() => {
@@ -580,8 +643,10 @@ export function App() {
 
   // Status message for the center board feed
   const statusMessage = useMemo(() => {
-    if (turnTimeoutRemaining !== null && turnTimeoutRemaining > 0) {
-      return `⚠️ Játékos kapcsolata megszakadt! Automatikus körátadás ${turnTimeoutRemaining} mp múlva...`;
+    const activePlayerId = activePlayer?.id;
+    const activeTimeout = (activePlayerId && offlineTimers[activePlayerId]) || turnTimeoutRemaining;
+    if (activeTimeout !== null && activeTimeout !== undefined && activeTimeout > 0) {
+      return `⚠️ Játékos kapcsolata megszakadt! Automatikus körátadás ${activeTimeout} mp múlva...`;
     }
     if (isSpectator) {
       return `👁️ Élő közvetítés · ${activePlayer?.name || 'Orvos'} köre van folyamatban${spectatorCount > 1 ? ` (${spectatorCount} néző)` : ''}`;
@@ -612,6 +677,7 @@ export function App() {
     return undefined;
   }, [
     turnTimeoutRemaining,
+    offlineTimers,
     gameMode,
     isMyTurn,
     isSpectator,
@@ -918,6 +984,7 @@ export function App() {
             turnNumber={gameState.turnNumber}
             myPlayerId={gameMode === 'online' ? myRemotePlayer?.id : undefined}
             offlineTimer={turnTimeoutPlayerId && turnTimeoutRemaining ? { playerId: turnTimeoutPlayerId, seconds: turnTimeoutRemaining } : null}
+            offlineTimers={offlineTimers}
           />
 
           <main className="app-main">

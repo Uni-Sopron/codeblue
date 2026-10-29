@@ -14,6 +14,7 @@ interface PlayerHUDProps {
   onSelectPlayer?: (index: number) => void;
   myPlayerId?: string;
   offlineTimer?: { playerId: string; seconds: number } | null;
+  offlineTimers?: Record<string, number>;
 }
 
 export const PlayerHUD: React.FC<PlayerHUDProps> = ({
@@ -25,6 +26,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
   onSelectPlayer,
   myPlayerId,
   offlineTimer,
+  offlineTimers,
 }) => {
   if (players.length === 0) {
     return null;
@@ -61,7 +63,8 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
           const totalBuildings = GAME_CONSTANTS.TOTAL_CLINIC_ELEMENTS;
           const isEliminated = player.eliminated === true;
           const isOffline = player.connected === false && !isEliminated;
-          const isTimedOutPlayer = isOffline && offlineTimer?.playerId === player.id && offlineTimer.seconds > 0;
+          const remainingSeconds = offlineTimers?.[player.id] ?? (offlineTimer?.playerId === player.id ? offlineTimer.seconds : null);
+          const isTimedOutPlayer = isOffline && typeof remainingSeconds === 'number' && remainingSeconds > 0;
 
           return (
             <div
@@ -74,7 +77,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
               {isEliminated && <span className="player-eliminated-tag">Kiszállt</span>}
               {isOffline && (
                 <span className={`player-offline-tag ${isTimedOutPlayer ? 'pulse' : ''}`}>
-                  {isTimedOutPlayer ? `Offline (${offlineTimer.seconds}s)` : 'Offline'}
+                  {isTimedOutPlayer ? `Offline (${remainingSeconds}s)` : 'Offline'}
                 </span>
               )}
 

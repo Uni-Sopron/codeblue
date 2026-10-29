@@ -63,15 +63,34 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
     rematchVotes: { ...room.rematchVotes },
     spectatorCount: room.spectators ? room.spectators.size : 0,
   });
-  const publicRooms = () => Array.from(rooms.values()).filter((r) => r.visibility === 'public').map((room) => {
-    const host = room.players.find((p) => p.isHost) || room.players[0];
-    return { code: room.code, name: room.name, hostName: host?.name || 'Kórház', hostAvatar: host?.avatar || 'surgeon',
-      playerCount: room.players.length, maxPlayers: 4, gameStarted: room.gameStarted, hasPin: room.hasPin,
-      spectatorCount: room.spectators ? room.spectators.size : 0 };
-  });
+  const publicRooms = () => Array.from(rooms.values())
+    .filter((r) => r.visibility === 'public')
+    .filter((r) => !r.gameStarted || r.players.some((p) => !p.isAI && (!p.eliminated || p.connected)))
+    .map((room) => {
+      const host = room.players.find((p) => p.isHost) || room.players[0];
+      return { code: room.code, name: room.name, hostName: host?.name || 'Kórház', hostAvatar: host?.avatar || 'surgeon',
+        playerCount: room.players.length, maxPlayers: 4, gameStarted: room.gameStarted, hasPin: room.hasPin,
+        spectatorCount: room.spectators ? room.spectators.size : 0 };
+    });
   const publishDirectory = () => io.to(DIRECTORY).emit('rooms:update', { rooms: publicRooms() });
   const publishRoom = (room) => io.to(room.code).emit('room:update', { room: roomView(room) });
-  const clearWatchdog = (room) => { if (room.disconnectTimer) clearTimeout(room.disconnectTimer); room.disconnectTimer = null; };
+  const clearWatchdog = (room, playerId) => {
+    if (!room) return;
+    const timers = room.disconnectTimers || (room.disconnectTimers = new Map());
+    if (playerId) {
+      if (timers.has(playerId)) {
+        clearTimeout(timers.get(playerId));
+        timers.delete(playerId);
+      }
+    } else {
+      for (const timer of timers.values()) clearTimeout(timer);
+      timers.clear();
+      if (room.disconnectTimer) {
+        clearTimeout(room.disconnectTimer);
+        room.disconnectTimer = null;
+      }
+    }
+  };
   const deleteRoom = (code) => { const room = rooms.get(code); if (room) clearWatchdog(room); rooms.delete(code); secrets.delete(code); };
   const limited = (socketId) => {
     const stamp = now();
@@ -82,42 +101,128 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
     return entry.count > 40;
   };
   const transferHost = transferHostToHuman;
-  const scheduleWatchdog = (room) => {
-    clearWatchdog(room);
-    const state = room.gameState;
-    const active = state && room.players.find((p) => p.id === state.players[state.activePlayerIndex]?.id);
-    if (!room.gameStarted || !active || active.connected || state.winner) return;
-    room.disconnectTimer = setTimeout(() => {
-      room.disconnectTimer = null;
-      if (!rooms.has(room.code) || active.connected || room.gameState?.players[room.gameState.activePlayerIndex]?.id !== active.id) return;
-      
-      // Mark player permanently eliminated
-      active.eliminated = true;
-      active.connected = false;
-      if (room.gameState) {
-        room.gameState = {
-          ...room.gameState,
-          players: room.gameState.players.map((p) =>
-            p.id === active.id ? { ...p, connected: false, eliminated: true } : p
-          ),
-        };
-      }
 
+  const handlePlayerElimination = (room, playerId, reason = 'timeout') => {
+    if (!rooms.has(room.code)) return;
+    clearWatchdog(room, playerId);
+    const player = room.players.find((p) => p.id === playerId);
+    if (!player || player.eliminated) return;
+    player.eliminated = true;
+    player.connected = false;
+
+    if (room.gameState) {
+      room.gameState = {
+        ...room.gameState,
+        players: room.gameState.players.map((p) =>
+          p.id === playerId ? { ...p, connected: false, eliminated: true } : p
+        ),
+      };
+    }
+
+    const remainingActive = room.gameState?.players.filter((p) => !p.eliminated) || [];
+    const hasEligibleHuman = room.players.some((p) => !p.isAI && (!p.eliminated || p.connected));
+
+    // Case 0: All players eliminated or no human players left in match
+    if (remainingActive.length === 0 || !hasEligibleHuman) {
+      io.to(room.code).emit('player:eliminated', { playerId, playerName: player.name, reason });
+      io.to(room.code).emit('room:closed', { reason: 'ALL_PLAYERS_LEFT', message: 'A szoba bezárt, mert minden játékos kiszállt.' });
+      deleteRoom(room.code);
+      publishDirectory();
+      return;
+    }
+
+    // Case 1: Exactly 1 player remaining (Last Doctor Standing)
+    if (remainingActive.length === 1) {
+      const winner = remainingActive[0];
+      room.gameState = {
+        ...room.gameState,
+        phase: 'game_over',
+        winner,
+        logs: [
+          {
+            id: `log-${now()}-${Math.random().toString(36).slice(2, 7)}`,
+            playerId: winner.id,
+            playerName: winner.name,
+            message: `🏆 GYŐZELEM! Minden más játékos kiszállt, így ${winner.name} nyerte meg a játékot!`,
+            timestamp: now(),
+            type: 'system',
+          },
+          ...(room.gameState.logs || []),
+        ],
+      };
+      io.to(room.code).emit('player:eliminated', { playerId, playerName: player.name, reason });
+      io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
+      publishRoom(room);
+      return;
+    }
+
+    // Case > 1: Check if the eliminated player was the currently active player
+    const wasActive = room.gameState?.players[room.gameState.activePlayerIndex]?.id === playerId;
+    if (wasActive) {
       let next = -1;
       for (let offset = 1; offset < room.gameState.players.length; offset++) {
         const index = (room.gameState.activePlayerIndex + offset) % room.gameState.players.length;
         const candidate = room.gameState.players[index];
-        if (!candidate.eliminated && room.players.some((p) => p.id === candidate.id && p.connected)) { next = index; break; }
+        if (!candidate.eliminated && (candidate.isAI || room.players.some((p) => p.id === candidate.id && p.connected))) {
+          next = index;
+          break;
+        }
       }
-      if (next === -1) return;
-      const previousIndex = room.gameState.activePlayerIndex;
-      room.gameState = { ...room.gameState, activePlayerIndex: next, phase: 'roll', diceResult: null, isRolling: false, drawnCard: null,
-        roundPassBonusGranted: false, builtThisTurn: false, turnNumber: room.gameState.turnNumber + (next <= previousIndex ? 1 : 0) };
-      io.to(room.code).emit('player:eliminated', { playerId: active.id, playerName: active.name, reason: 'timeout' });
-      io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
-      io.to(room.code).emit('turn:auto_passed', { newActivePlayerIndex: next, gameState: room.gameState, eliminatedPlayerId: active.id });
-    }, disconnectTimeoutMs);
-    room.disconnectTimer.unref?.();
+      if (next !== -1) {
+        const previousIndex = room.gameState.activePlayerIndex;
+        room.gameState = {
+          ...room.gameState,
+          activePlayerIndex: next,
+          phase: 'roll',
+          diceResult: null,
+          isRolling: false,
+          drawnCard: null,
+          roundPassBonusGranted: false,
+          builtThisTurn: false,
+          turnNumber: room.gameState.turnNumber + (next <= previousIndex ? 1 : 0),
+        };
+        io.to(room.code).emit('player:eliminated', { playerId, playerName: player.name, reason });
+        io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
+        io.to(room.code).emit('turn:auto_passed', {
+          newActivePlayerIndex: next,
+          gameState: room.gameState,
+          eliminatedPlayerId: playerId,
+        });
+        publishRoom(room);
+        scheduleWatchdog(room);
+        return;
+      }
+    }
+
+    io.to(room.code).emit('player:eliminated', { playerId, playerName: player.name, reason });
+    io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
+    publishRoom(room);
+  };
+
+  const scheduleWatchdog = (room) => {
+    if (!room?.gameStarted || room.gameState?.winner) {
+      clearWatchdog(room);
+      return;
+    }
+    const timers = room.disconnectTimers || (room.disconnectTimers = new Map());
+    for (const player of room.players) {
+      if (player.isAI || player.eliminated) {
+        clearWatchdog(room, player.id);
+        continue;
+      }
+      if (!player.connected) {
+        if (!timers.has(player.id)) {
+          const timer = setTimeout(() => {
+            timers.delete(player.id);
+            handlePlayerElimination(room, player.id, 'timeout');
+          }, disconnectTimeoutMs);
+          timer.unref?.();
+          timers.set(player.id, timer);
+        }
+      } else {
+        clearWatchdog(room, player.id);
+      }
+    }
   };
 
   const gc = setInterval(() => {
@@ -182,7 +287,7 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
       const avatar = sanitizeAvatar(avatarId);
       const player = { socketId: socket.id, id: 'p1', name: hostName, avatar, avatarTitle: TITLES[avatar], color: sanitizeColor(color), isHost: true, connected: true };
       const room = { code, name: sanitizeName(name, `${hostName} Klinikája`, 24), visibility, hasPin: pin !== '', hostSocketId: socket.id,
-        players: [player], gameStarted: false, gameState: null, rematchVotes: {}, disconnectTimer: null, spectators: new Set(), createdAt: new Date(now()).toISOString(), lastActive: now() };
+        players: [player], gameStarted: false, gameState: null, rematchVotes: {}, disconnectTimers: new Map(), disconnectTimer: null, spectators: new Set(), createdAt: new Date(now()).toISOString(), lastActive: now() };
       const salt = randomBytes(16).toString('hex');
       secrets.set(code, { salt, pinHash: pin ? hash(pin, salt) : null, tokens: new Map() });
       rooms.set(code, room);
@@ -403,11 +508,15 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
         transferHost(room);
         room.gameState = { ...room.gameState, players: room.gameState.players.map((p) => ({ ...p, connected: room.players.find((rp) => rp.id === p.id)?.connected ?? false, isHost: room.players.find((rp) => rp.id === p.id)?.isHost ?? false })) };
         const active = room.gameState.players[room.gameState.activePlayerIndex]?.id === player.id;
-        io.to(room.code).emit('player:disconnected', { playerId: player.id, playerName: player.name, ...(explicit ? { reason: 'left' } : {}), isActivePlayer: active, ...(active ? { timeoutSeconds: Math.ceil(disconnectTimeoutMs / 1000) } : {}) });
+        io.to(room.code).emit('player:disconnected', { playerId: player.id, playerName: player.name, ...(explicit ? { reason: 'left' } : {}), isActivePlayer: active, timeoutSeconds: Math.ceil(disconnectTimeoutMs / 1000) });
         if (explicit) io.to(room.code).emit('room:player_left', { playerId: player.id, playerName: player.name });
         publishRoom(room);
         if (previousHost !== room.hostSocketId) io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
-        scheduleWatchdog(room);
+        if (explicit) {
+          handlePlayerElimination(room, player.id, 'left');
+        } else {
+          scheduleWatchdog(room);
+        }
       }
       publishDirectory();
     };

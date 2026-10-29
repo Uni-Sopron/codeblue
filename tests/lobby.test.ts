@@ -341,3 +341,80 @@ test('Anonymous Spectator Mode: connects viewers without player mutation, broadc
   const hostCount4 = await hostCountEvent4;
   assert.equal(hostCount4.spectatorCount, 0);
 });
+
+test('Inactive player disconnect watchdog runs timer, emits timeoutSeconds, and eliminates player', async (t) => {
+  const { connect } = await setup(t, { disconnectTimeoutMs: 50 });
+  const host = await connect();
+  const guest = await connect();
+  const created = await request(host, 'room:create', avatar);
+  const roomCode = created.roomCode;
+  await request(guest, 'room:join', { ...avatar, playerName: 'Dr. Vendég', roomCode });
+  await request(host, 'room:start', { roomCode });
+
+  // Guest (index 1, non-active while host index 0 is active) disconnects
+  const disconnectEvt = event<{ playerId: string; timeoutSeconds?: number; isActivePlayer: boolean }>(
+    host,
+    'player:disconnected'
+  );
+  const eliminatedEvt = event<{ playerId: string; reason: string }>(host, 'player:eliminated');
+
+  guest.disconnect();
+
+  const disc = await disconnectEvt;
+  assert.equal(disc.playerId, 'p2');
+  assert.equal(disc.isActivePlayer, false);
+  assert.equal(typeof disc.timeoutSeconds, 'number');
+  assert.equal(disc.timeoutSeconds, 1);
+
+  const elim = await eliminatedEvt;
+  assert.equal(elim.playerId, 'p2');
+  assert.equal(elim.reason, 'timeout');
+});
+
+test('Last doctor standing technical victory when all opponents disconnect/eliminate', async (t) => {
+  const { connect } = await setup(t, { disconnectTimeoutMs: 50 });
+  const host = await connect();
+  const guest = await connect();
+  const created = await request(host, 'room:create', avatar);
+  const roomCode = created.roomCode;
+  await request(guest, 'room:join', { ...avatar, playerName: 'Dr. Vendég', roomCode });
+  await request(host, 'room:start', { roomCode });
+
+  const syncEvt = event<{ gameState: { phase: string; winner?: { id: string } } }>(
+    host,
+    'game:sync_broadcast',
+    (p) => p.gameState?.winner !== null
+  );
+  guest.disconnect();
+
+  const sync = await syncEvt;
+  assert.equal(sync.gameState.phase, 'game_over');
+  assert.equal(sync.gameState.winner?.id, 'p1');
+});
+
+test('Empty room termination when all players leave or are eliminated, closes room and removes from public directory', async (t) => {
+  const { connect } = await setup(t, { disconnectTimeoutMs: 40 });
+  const host = await connect();
+  const guest = await connect();
+  const spectator = await connect();
+
+  const created = await request(host, 'room:create', avatar);
+  const roomCode = created.roomCode;
+  await request(guest, 'room:join', { ...avatar, playerName: 'Dr. Vendég', roomCode });
+  await request(host, 'room:start', { roomCode });
+  await request(spectator, 'room:spectate', { roomCode });
+
+  const roomClosedEvt = event<{ reason: string; message: string }>(spectator, 'room:closed');
+
+  // Both players leave
+  await request(host, 'room:leave', {});
+  await request(guest, 'room:leave', {});
+
+  const closed = await roomClosedEvt;
+  assert.equal(closed.reason, 'ALL_PLAYERS_LEFT');
+
+  // Directory query should not return the dead room
+  const spectateAgain = await request(spectator, 'room:spectate', { roomCode });
+  assert.equal(spectateAgain.success, false);
+  assert.equal(spectateAgain.errorCode, 'ROOM_NOT_FOUND');
+});

@@ -1077,6 +1077,28 @@ rollTimer.current = setTimeout(() => {
         };
       }
 
+      // Technikai győzelem ellenőrzése (ha minden más játékos kiszállt)
+      const remainingActive = prev.players.filter((p) => !p.eliminated);
+      if (prev.players.length > 1 && remainingActive.length === 1) {
+        const lastStanding = remainingActive[0];
+        return {
+          ...prev,
+          phase: 'game_over',
+          winner: lastStanding,
+          logs: [
+            {
+              id: createLogId(),
+              playerId: lastStanding.id,
+              playerName: lastStanding.name,
+              message: `🏆 GYŐZELEM! Minden más játékos kiszállt, így ${lastStanding.name} nyerte meg a játékot!`,
+              timestamp: Date.now(),
+              type: 'system',
+            },
+            ...prev.logs,
+          ],
+        };
+      }
+
       // Következő játékos kiválasztása
       let nextIndex = (prev.activePlayerIndex + 1) % prev.players.length;
       let nextTurnNumber = prev.turnNumber;
