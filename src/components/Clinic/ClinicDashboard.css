@@ -1,0 +1,146 @@
+.clinic-dashboard,
+.clinic-dashboard * { box-sizing: border-box; }
+
+.clinic-dashboard {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px;
+  border: 1px solid #294354;
+  border-radius: 16px;
+  background: #0b1725;
+  color: #f1f7fb;
+  text-align: left;
+  font: 14px/1.5 system-ui, sans-serif;
+}
+
+.clinic-header,
+.clinic-title-group,
+.clinic-progress-wrapper { display: flex; align-items: center; gap: 12px; }
+.clinic-header { justify-content: space-between; flex-wrap: wrap; padding-bottom: 20px; border-bottom: 1px solid #243a4a; }
+.clinic-title-group { min-width: 0; }
+.clinic-title-icon { display: grid; width: 44px; height: 44px; flex: 0 0 auto; place-items: center; border: 1px solid #315563; border-radius: 12px; background: #12313d; color: #69d7e1; }
+.clinic-title-icon svg { width: 24px; height: 24px; }
+.clinic-dashboard .clinic-title { margin: 0; color: #f3f9fc; font-size: 19px; font-weight: 750; line-height: 1.35; letter-spacing: -0.4px; overflow-wrap: anywhere; }
+.clinic-dashboard .clinic-subtitle { margin: 4px 0 0; color: #8fa8ba; font-size: 12px; }
+.clinic-progress-wrapper { min-width: 0; flex-direction: column; align-items: flex-start; gap: 7px; }
+.clinic-progress-count { color: #9eb6c6; font-size: 12px; white-space: nowrap; }
+.clinic-progress-count strong { color: #73e0c0; font-size: 20px; }
+.clinic-progress { width: 140px; max-width: 100%; height: 6px; overflow: hidden; border: 0; border-radius: 8px; background: #1f3545; color: #4ed3b1; appearance: none; }
+.clinic-progress::-webkit-progress-bar { border-radius: 8px; background: #1f3545; }
+.clinic-progress::-webkit-progress-value { border-radius: 8px; background: linear-gradient(90deg, #28b6cf, #56d6ad); }
+.clinic-progress::-moz-progress-bar { border-radius: 8px; background: linear-gradient(90deg, #28b6cf, #56d6ad); }
+
+.clinic-blueprint { min-width: 0; overflow: hidden; border: 1px solid #294959; border-radius: 14px; background: radial-gradient(ellipse at 45% 30%, #173545, #0b1c2b 75%); }
+.clinic-blueprint-heading { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; padding: 18px 20px 0; }
+.clinic-dashboard .clinic-blueprint-heading h3 { margin: 0; color: #e3f4fb; font-size: 15px; font-weight: 700; }
+.clinic-blueprint-heading p { margin: 4px 0 0; color: #89a6b9; font-size: 11px; }
+.clinic-blueprint-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0; padding: 0; list-style: none; color: #9db5c6; font-size: 10px; }
+.clinic-blueprint-legend li { display: flex; align-items: center; gap: 5px; }
+.clinic-legend-dot { width: 6px; height: 6px; border-radius: 50%; }
+.clinic-legend-dot--locked { background: #70808c; }
+.clinic-legend-dot--available { background: #54d2ed; }
+.clinic-legend-dot--built { background: #55d8ae; }
+.clinic-blueprint-building { position: relative; width: 100%; min-width: 0; min-height: 360px; aspect-ratio: 1.65; }
+.clinic-blueprint-structure,
+.clinic-blueprint-zones { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.clinic-blueprint-zone {
+  position: absolute;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #647a86;
+  border-radius: 4px;
+  background: #1b2c35;
+  color: #c4d2dc;
+  cursor: pointer;
+  isolation: isolate;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.clinic-blueprint-zone::after { position: absolute; z-index: -1; inset: 0; background: linear-gradient(0deg, #061421 0%, transparent 80%); content: ''; }
+.clinic-blueprint-zone img { position: absolute; z-index: -2; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) brightness(0.6); transition: filter 300ms ease; }
+.clinic-blueprint-zone--reception { left: 12.3%; top: 76.5%; width: 26.1%; height: 15.8%; }
+.clinic-blueprint-zone--lab { left: 43%; top: 76.5%; width: 27.1%; height: 15.8%; }
+.clinic-blueprint-zone--diagnostics { left: 12.3%; top: 56.1%; width: 26.1%; height: 15.8%; }
+.clinic-blueprint-zone--surgery { left: 43%; top: 56.1%; width: 27.1%; height: 15.8%; }
+.clinic-blueprint-zone--vip_ward { left: 12.3%; top: 35.7%; width: 26.1%; height: 15.8%; }
+.clinic-blueprint-zone--icu { left: 43%; top: 35.7%; width: 27.1%; height: 15.8%; }
+.clinic-blueprint-zone--rehab { left: 82.2%; top: 65.5%; width: 15.7%; height: 24.3%; }
+.clinic-blueprint-zone--helipad { left: 16.5%; top: 20.2%; width: 58%; height: 10.3%; min-height: 44px; }
+.clinic-blueprint-zone--available { border-color: #49b8d7; color: #d4f5ff; }
+.clinic-blueprint-zone--available img { filter: grayscale(0.4) brightness(0.8); }
+.clinic-blueprint-zone--built { border-color: #61dbb7; color: #d8fff0; box-shadow: 0 0 15px #22bd8a38; }
+.clinic-blueprint-zone--built img { filter: saturate(1.15); }
+.clinic-blueprint-zone:hover,
+.clinic-blueprint-zone[aria-pressed='true'] { border-color: #c9f7ff; box-shadow: inset 0 0 0 2px #c9f7ff; }
+.clinic-blueprint-zone-name { max-width: 100%; padding: 4px 5px; font: 700 clamp(9px, 1.05vw, 12px)/1.2 system-ui, sans-serif; overflow-wrap: anywhere; text-align: center; }
+.clinic-blueprint-zone-number { position: absolute; top: 5px; left: 6px; color: #f1f7fb; font: 750 10px/1 system-ui, sans-serif; }
+.clinic-blueprint-zone-status { position: absolute; top: 4px; right: 5px; width: 12px; height: 12px; }
+
+.clinic-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 18px; }
+.clinic-room { display: flex; min-width: 0; flex-direction: column; overflow: hidden; border: 1px solid #34434e; border-radius: 13px; background: #101f2c; transition: border-color 200ms ease, box-shadow 200ms ease; scroll-margin-block: 20px; }
+.clinic-room-visual { position: relative; overflow: hidden; aspect-ratio: 1.65; background: #1a2933; }
+.clinic-room-visual::after { position: absolute; inset: 0; background: linear-gradient(0deg, #0a1725b8 0%, transparent 60%); content: ''; }
+.clinic-room-image { display: block; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) brightness(0.6); transition: filter 350ms ease; }
+.clinic-room-number,
+.clinic-room-status { position: absolute; z-index: 1; display: inline-flex; align-items: center; gap: 5px; top: 12px; padding: 5px 8px; border: 1px solid #74818d66; border-radius: 6px; background: #071421d9; color: #c4d2dc; font-size: 10px; font-weight: 700; }
+.clinic-room-number { left: 12px; }
+.clinic-room-status { right: 12px; }
+.clinic-room-status svg { width: 12px; height: 12px; }
+.clinic-room-lock { position: absolute; z-index: 1; top: 50%; left: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%); color: #eef6fc; filter: drop-shadow(0 2px 8px #000); }
+.clinic-room-content { display: flex; flex: 1; flex-direction: column; gap: 12px; padding: 18px; }
+.clinic-dashboard .clinic-room-name { margin: 0; color: #eff8fc; font-size: 17px; font-weight: 700; line-height: 1.3; letter-spacing: -0.2px; }
+.clinic-room-description { margin: 0; color: #91a8b9; font-size: 12px; line-height: 1.6; }
+.clinic-room-reason { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: #adc0cd; font-size: 11px; line-height: 1.5; }
+.clinic-room-reason svg { width: 13px; height: 13px; margin-top: 1px; flex: 0 0 auto; }
+.clinic-room-footer { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-top: auto; padding-top: 14px; border-top: 1px solid #30414e; }
+.clinic-room-price { display: flex; flex-direction: column; gap: 3px; }
+.clinic-room-price > span { color: #849cac; font-size: 10px; }
+.clinic-room-price strong { color: #d3e0e8; font-size: 15px; line-height: 1.3; }
+.clinic-room-price del { color: #7b93a4; font-size: 11px; }
+.clinic-room-price .clinic-room-price--discount { color: #f1cd7d; }
+.clinic-room-buy { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 6px; padding: 9px 13px; border: 1px solid #43bfd3; border-radius: 8px; background: #0d758c; color: #effcff; font: 700 12px/1.3 system-ui, sans-serif; cursor: pointer; }
+.clinic-room-buy svg { width: 15px; height: 15px; }
+.clinic-room-buy:hover:not(:disabled) { background: #1197ac; }
+.clinic-room-buy:disabled { border-color: #3a4b57; background: #233440; color: #8b9caa; cursor: not-allowed; }
+.clinic-room-operating { display: inline-flex; min-height: 42px; align-items: center; gap: 6px; color: #71dfb7; font-size: 12px; font-weight: 700; }
+.clinic-room-operating svg { width: 18px; height: 18px; }
+.clinic-room--available { border-color: #319eb8; animation: clinic-available-glow 3s ease-in-out infinite; }
+.clinic-room--available .clinic-room-image { filter: grayscale(0.35) saturate(0.9) brightness(0.85); }
+.clinic-room--available .clinic-room-status { border-color: #47b9d3; color: #a9eeff; }
+.clinic-room--built { border-color: #35866f; background: linear-gradient(145deg, #11392e55, #101f2c 65%); box-shadow: 0 0 20px #20b3841a; }
+.clinic-room--built .clinic-room-image { filter: saturate(1.15); }
+.clinic-room--built .clinic-room-status { border-color: #3dac86; color: #91edc4; }
+.clinic-room--selected { border-color: #9ad9ed; }
+.clinic-room:focus,
+.clinic-blueprint-zone:focus-visible,
+.clinic-room-buy:focus-visible { outline: 3px solid #9aeaff; outline-offset: 4px; }
+.clinic-blueprint-zone:focus-visible { outline-offset: 2px; }
+
+@keyframes clinic-available-glow {
+  0%, 100% { box-shadow: 0 0 0 1px #45c9e322, 0 0 12px #26aec51a; }
+  50% { box-shadow: 0 0 0 1px #45c9e34d, 0 0 24px #26aec533; }
+}
+
+@media (max-width: 640px) {
+  .clinic-dashboard { padding: 14px; gap: 18px; }
+  .clinic-grid { grid-template-columns: minmax(0, 1fr); }
+  .clinic-blueprint-heading { padding: 14px 12px 0; }
+  .clinic-room-content { padding: 15px; }
+  .clinic-progress-wrapper { width: 100%; flex-direction: row; align-items: center; }
+  .clinic-progress { flex: 1; }
+  .clinic-blueprint-zone--rehab .clinic-blueprint-zone-name { font-size: 9px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clinic-dashboard *,
+  .clinic-dashboard *::before,
+  .clinic-dashboard *::after { animation: none; transition: none; }
+}

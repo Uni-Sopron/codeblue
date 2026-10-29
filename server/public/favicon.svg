@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b172b"/>
+      <stop offset="50%" stop-color="#040b17"/>
+      <stop offset="100%" stop-color="#01040a"/>
+    </linearGradient>
+
+    <!-- Border Glow Gradient -->
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.8"/>
+      <stop offset="40%" stop-color="#0284c7" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#00f5ff" stop-opacity="0.9"/>
+    </linearGradient>
+
+    <!-- Medical Cross Gradient -->
+    <linearGradient id="crossGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f5ff"/>
+      <stop offset="35%" stop-color="#0284c7"/>
+      <stop offset="70%" stop-color="#0369a1"/>
+      <stop offset="100%" stop-color="#075985"/>
+    </linearGradient>
+
+    <!-- Inner Radial Glow -->
+    <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00f5ff" stop-opacity="0.28"/>
+      <stop offset="60%" stop-color="#0284c7" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Pulse Line Gradient -->
+    <linearGradient id="pulseGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="25%" stop-color="#ffffff"/>
+      <stop offset="50%" stop-color="#00f5ff"/>
+      <stop offset="75%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+
+    <!-- Glow Filter -->
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+
+    <!-- Cross Shadow -->
+    <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#000000" flood-opacity="0.6"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="16" flood-color="#00f5ff" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Squircle Base with Border -->
+  <rect x="14" y="14" width="484" height="484" rx="112" fill="url(#bgGrad)" stroke="url(#borderGrad)" stroke-width="12"/>
+
+  <!-- Ambient Glow Behind Cross -->
+  <circle cx="256" cy="256" r="170" fill="url(#centerGlow)"/>
+
+  <!-- Medical Cross Group with Shadow -->
+  <g filter="url(#dropShadow)">
+    <!-- Vertical Arm -->
+    <rect x="206" y="96" width="100" height="320" rx="26" fill="url(#crossGrad)"/>
+    <!-- Horizontal Arm -->
+    <rect x="96" y="206" width="320" height="100" rx="26" fill="url(#crossGrad)"/>
+    <!-- Inner Cross Highlight Core -->
+    <circle cx="256" cy="256" r="44" fill="#00f5ff" opacity="0.18"/>
+  </g>
+
+  <!-- Cardiogram / Heartbeat Pulse Wave with Neon Glow -->
+  <!-- Outer Glow Stroke -->
+  <path d="M 90 256 L 152 256 L 172 240 L 192 256 L 210 278 L 244 142 L 278 354 L 304 238 L 322 264 L 338 256 L 422 256"
+        fill="none"
+        stroke="#00f5ff"
+        stroke-width="32"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        opacity="0.45"
+        filter="url(#softGlow)"/>
+
+  <!-- Main Sharp Pulse Line -->
+  <path d="M 90 256 L 152 256 L 172 240 L 192 256 L 210 278 L 244 142 L 278 354 L 304 238 L 322 264 L 338 256 L 422 256"
+        fill="none"
+        stroke="url(#pulseGrad)"
+        stroke-width="18"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+
+  <!-- Inner High-Intensity White Core -->
+  <path d="M 90 256 L 152 256 L 172 240 L 192 256 L 210 278 L 244 142 L 278 354 L 304 238 L 322 264 L 338 256 L 422 256"
+        fill="none"
+        stroke="#ffffff"
+        stroke-width="8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        opacity="0.95"/>
+
+  <!-- High-Energy Pulse Spark Dot at R-Peak -->
+  <circle cx="244" cy="142" r="9" fill="#ffffff" filter="url(#softGlow)"/>
+  <circle cx="244" cy="142" r="5" fill="#a5f3fc"/>
+</svg>
