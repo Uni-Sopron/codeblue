@@ -86,7 +86,8 @@ test('Public directory pushes sanitized summaries for create/join/start/leave an
   assert.equal((summary.name as string).length, 24);
   assert.equal(summary.hasPin, true);
   assert.equal(summary.hostName, avatar.playerName);
-  assert.deepEqual(Object.keys(summary).sort(), ['code', 'name', 'hostName', 'hostAvatar', 'playerCount', 'maxPlayers', 'gameStarted', 'hasPin'].sort());
+  assert.deepEqual(Object.keys(summary).sort(), ['code', 'name', 'hostName', 'hostAvatar', 'playerCount', 'maxPlayers', 'gameStarted', 'hasPin', 'spectatorCount'].sort());
+  assert.equal(summary.spectatorCount, 0);
   noSecretKeys(summary);
   const privateHost = await connect();
   const privateCreated = event<{ rooms: Record<string, unknown>[] }>(browser, 'rooms:update');
@@ -274,4 +275,68 @@ test('Server strictly enforces maxRooms limit and returns SERVER_FULL', async (t
   assert.equal(created2.success, false);
   assert.equal(created2.errorCode, 'SERVER_FULL');
   assert.match(created2.error as string, /maximális szobaszámot/);
+});
+
+test('Anonymous Spectator Mode: connects viewers without player mutation, broadcasts count updates, and requires PIN', async (t) => {
+  const { connect } = await setup(t);
+  const host = await connect();
+  const guest = await connect();
+  const spectator1 = await connect();
+  const spectator2 = await connect();
+
+  // Create PIN-protected public room
+  const created = await request(host, 'room:create', { ...avatar, name: 'Közvetített Klinika', pin: '4321' });
+  const roomCode = created.roomCode as string;
+  await request(guest, 'room:join', { ...avatar, roomCode, pin: '4321' });
+  await request(host, 'room:start', { roomCode });
+
+  // Spectator trying without PIN receives PIN_REQUIRED
+  const noPin = await request(spectator1, 'room:spectate', { roomCode });
+  assert.equal(noPin.success, false);
+  assert.equal(noPin.errorCode, 'PIN_REQUIRED');
+
+  // Spectator with wrong PIN receives PIN_INVALID
+  const badPin = await request(spectator1, 'room:spectate', { roomCode, pin: '9999' });
+  assert.equal(badPin.success, false);
+  assert.equal(badPin.errorCode, 'PIN_INVALID');
+
+  // Spectator 1 connects with correct PIN
+  const hostCountEvent1 = event<{ roomCode: string; spectatorCount: number }>(host, 'room:spectator_count');
+  const spectateRes1 = await request(spectator1, 'room:spectate', { roomCode, pin: '4321' });
+  assert.equal(spectateRes1.success, true);
+  assert.equal(spectateRes1.spectatorCount, 1);
+  const hostCount1 = await hostCountEvent1;
+  assert.equal(hostCount1.spectatorCount, 1);
+
+  // Spectator 2 connects
+  const hostCountEvent2 = event<{ roomCode: string; spectatorCount: number }>(host, 'room:spectator_count');
+  const spectateRes2 = await request(spectator2, 'room:spectate', { roomCode, pin: '4321' });
+  assert.equal(spectateRes2.success, true);
+  assert.equal(spectateRes2.spectatorCount, 2);
+  const hostCount2 = await hostCountEvent2;
+  assert.equal(hostCount2.spectatorCount, 2);
+
+  // Verify room players list does NOT contain spectators (strictly anonymous)
+  const roomDetails = spectateRes2.room as { players: unknown[]; spectatorCount: number };
+  assert.equal(roomDetails.players.length, 2);
+  assert.equal(roomDetails.spectatorCount, 2);
+
+  // Spectator actions cannot drive state or sync
+  const broadcasts: unknown[] = [];
+  host.on('game:sync_broadcast', (p) => broadcasts.push(p));
+  spectator1.emit('game:sync', { roomCode, gameState: { activePlayerIndex: 99 } });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.deepEqual(broadcasts, []);
+
+  // Spectator 1 leaves cleanly via room:leave
+  const hostCountEvent3 = event<{ roomCode: string; spectatorCount: number }>(host, 'room:spectator_count');
+  await request(spectator1, 'room:leave', {});
+  const hostCount3 = await hostCountEvent3;
+  assert.equal(hostCount3.spectatorCount, 1);
+
+  // Spectator 2 disconnects socket
+  const hostCountEvent4 = event<{ roomCode: string; spectatorCount: number }>(host, 'room:spectator_count');
+  spectator2.disconnect();
+  const hostCount4 = await hostCountEvent4;
+  assert.equal(hostCount4.spectatorCount, 0);
 });

@@ -11,7 +11,7 @@
 1. [A Játék Lényege: Gazdálkodj okosan orvosi köntösben](#1-a-játék-lényege-gazdálkodj-okosan-orvosi-köntösben)
 2. [A Játék Célja és a Hármas Győzelmi Feltétel](#2-a-játék-célja-és-a-hármas-győzelmi-feltétel)
 3. [Orvosi Karakterek és Szerepkörök](#3-orvosi-karakterek-és-szerepkörök)
-4. [Játékmódok: Online Multiplayer, Hotseat és Bot Demó](#4-játékmódok-online-multiplayer-hotseat-és-bot-demó)
+4. [Játékmódok: Online Multiplayer, Hotseat, Bot Demó és Élő Közvetítés](#4-játékmódok-online-multiplayer-hotseat-bot-demó-és-élő-közvetítés)
 5. [Mesterséges Intelligencia és Autonóm AI Botok](#5-mesterséges-intelligencia-és-autonóm-ai-botok)
 6. [A Játéktábla Mezői és a 40 Lapos Eseménykártya Pakli](#6-a-játéktábla-mezői-és-a-40-lapos-eseménykártya-pakli)
 7. [A Klinika 8 Megépíthető Részlege](#7-a-klinika-8-megépíthető-részlege)
@@ -21,7 +21,7 @@
 11. [Technológiai Stack és Architektúra](#11-technológiai-stack-és-architektúra)
 12. [Telepítés és Helyi Futtatás](#12-telepítés-és-helyi-futtatás)
 13. [Docker és Éles Üzembe Helyezés (OCI)](#13-docker-és-éles-üzembe-helyezés-oci)
-14. [Tesztelés és Kódminőség (154 Teszt)](#14-tesztelés-és-kódminőség-154-teszt)
+14. [Tesztelés és Kódminőség (155 Teszt)](#14-tesztelés-és-kódminőség-155-teszt)
 15. [Készítők és Licenc](#15-készítők-és-licenc)
 
 ---
@@ -74,9 +74,9 @@ A játékban 4 különleges orvoskarakter választható, saját egyedi portréva
 
 ---
 
-## 4. Játékmódok: Online Multiplayer, Hotseat és Bot Demó
+## 4. Játékmódok: Online Multiplayer, Hotseat, Bot Demó és Élő Közvetítés
 
-A játék 3 rugalmas módban játszható:
+A játék 4 rugalmas módban élvezhető:
 
 ### 1. 🌐 Valós Idejű Online Multiplayer (Socket.io)
 
@@ -98,6 +98,13 @@ A helyi beállító képernyőn egyetlen kattintással választható játékmód
 - **`[🤖 Teljes Bot Harc (Demó)]`**: Mind a 4 orvost AI irányítja; a játék autonóm módon zajlik le a néző szeme előtt.
 - **`[👤 1 Ember + Botok]`**: Egyetlen élő játékos küzd meg 1–3 gépi orvos-vállalkozó ellen.
 - **`[👥 Hotseat (Csak Emberek)]`**: Klasszikus többemberes társasjáték.
+
+### 4. 👁️ Élő Névtelen Közvetítés és Néző Mód (Anonymous Spectator Mode)
+
+- **Valós idejű meccsnézés:** Bármely nyilvános vagy PIN-kóddal védett szoba mérkőzése élőben megtekinthető a lobbyból a `[👁️ Megtekintés]` vagy `[👁️ Nézőként]` gombra kattintva.
+- **Szigorúan névtelen és passzív (Read-Only):** A nézők nem foglalnak el játékos helyet a 4 orvosi helyből, nem hajthatnak végre köröket vagy állapotmódosításokat.
+- **Élő nézőszámláló (Spectator Counter):** Mind a közvetítés nézői, mind az aktív orvosok valós időben látják az élő nézők számát (`👁️ X néző`).
+- **Kényelmes kilépés:** Bármikor egy kattintással elhagyható a közvetítés anélkül, hogy a folyamatban lévő mérkőzés megszakadna.
 
 ---
 
@@ -314,9 +321,9 @@ A backend konténer a 3001-es porton indul el, és közvetlenül illeszkedik a m
 
 ---
 
-## 14. Tesztelés és Kódminőség (154 Teszt)
+## 14. Tesztelés és Kódminőség (155 Teszt)
 
-A projekt a Node.js beépített natív tesztfuttatóját (`node --test`) használja, amely villámgyorsan, külső nehézkes könyvtárak nélkül futtat le **152 kiterjedt egységtesztet**:
+A projekt a Node.js beépített natív tesztfuttatóját (`node --test`) használja, amely villámgyorsan, külső nehézkes könyvtárak nélkül futtat le **155 kiterjedt egységtesztet**:
 
 ```bash
 # Egységtesztek futtatása (játékmotor, bank, bot stratégia, hangok, szanitáció, szobainvariánsok)
@@ -331,7 +338,8 @@ npm run build
 
 ### ✅ Tesztelési Lefedettség
 
-- **154 / 154 automatizált teszt sikeres (0 hiba):**
+- **155 / 155 automatizált teszt sikeres (0 hiba):**
+  - Névtelen Spectator közvetítés: nézőszámláló broadcast, PIN-védelem és állapotmutáció-megtagadás.
   - Játékmotor fázisátmenetek, kockadobás, mezőhatások és győzelmi feltételek.
   - Klinikai Bank: kamatszámítás, betételhelyezés, hitelfelvétel és törlesztési invariánsok.
   - AI Bot heurisztika: önálló döntéshozatal, részlegvásárlás és többlettőke-lekötés.

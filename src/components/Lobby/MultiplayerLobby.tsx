@@ -16,11 +16,11 @@ import './MultiplayerLobby.css';
 
 interface MultiplayerLobbyProps {
   onStartLocalGame: () => void;
-  onStartOnlineGame: (room: MultiplayerRoom, myPlayer: RemotePlayer) => void;
+  onStartOnlineGame: (room: MultiplayerRoom, myPlayer: RemotePlayer | null, isSpectator?: boolean) => void;
 }
 
 type LobbyView = 'select' | 'create' | 'join' | 'in_lobby';
-interface PinTarget { code: string; name: string }
+interface PinTarget { code: string; name: string; isSpectate?: boolean }
 
 export function MultiplayerLobby({ onStartLocalGame, onStartOnlineGame }: MultiplayerLobbyProps) {
   const [view, setView] = useState<LobbyView>('select');
@@ -175,6 +175,36 @@ export function MultiplayerLobby({ onStartLocalGame, onStartOnlineGame }: Multip
     }
   };
 
+  const spectateRoom = async (code: string, pin?: string, name?: string) => {
+    if (requestPending.current) return;
+    requestPending.current = true;
+    setErrorMsg(null);
+    setPinError(null);
+    setIsConnecting(true);
+    try {
+      const result = await multiplayerService.spectateRoom(code, pin);
+      if (result.success && result.room) {
+        setPinTarget(null);
+        setPinError(null);
+        onStartOnlineGame(result.room, null, true);
+      } else if (result.errorCode === 'PIN_REQUIRED' || result.errorCode === 'PIN_INVALID') {
+        setPinTarget({ code, name: name || `Szoba: ${code}`, isSpectate: true });
+        setPinError(result.errorCode === 'PIN_REQUIRED' ? null : result.error || 'Hibás PIN.');
+      } else if (pinTarget) {
+        setPinError(result.error || 'Nem sikerült csatlakozni a közvetítéshez.');
+      } else {
+        setErrorMsg(result.error || 'Nem sikerült csatlakozni a közvetítéshez.');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Hálózati hiba történt.';
+      if (pinTarget) setPinError(message);
+      else setErrorMsg(message);
+    } finally {
+      requestPending.current = false;
+      setIsConnecting(false);
+    }
+  };
+
   const joinPublicRoom = (target: PublicRoomSummary) => {
     if (target.hasPin) {
       setPinError(null);
@@ -253,7 +283,21 @@ export function MultiplayerLobby({ onStartLocalGame, onStartOnlineGame }: Multip
               </div>
               <details className="lobby-profile-disclosure"><summary>Orvosod: <strong>{effectiveName}</strong></summary>{profile}</details>
               {errorMsg && <p className="lobby-form-error" role="alert">{errorMsg}</p>}
-              <PublicRoomList rooms={publicRooms} loaded={roomsLoaded} error={browserError} pending={isConnecting} onJoin={joinPublicRoom} />
+              <PublicRoomList
+                rooms={publicRooms}
+                loaded={roomsLoaded}
+                error={browserError}
+                pending={isConnecting}
+                onJoin={joinPublicRoom}
+                onSpectate={(target) => {
+                  if (target.hasPin) {
+                    setPinError(null);
+                    setPinTarget({ code: target.code, name: target.name, isSpectate: true });
+                  } else {
+                    void spectateRoom(target.code, undefined, target.name);
+                  }
+                }}
+              />
             </div>
           </>
         ) : view === 'in_lobby' && room ? (
@@ -305,7 +349,26 @@ export function MultiplayerLobby({ onStartLocalGame, onStartOnlineGame }: Multip
           </div>
         )}
       </div>
-      {pinTarget && <RoomPinDialog key={pinTarget.code} roomName={pinTarget.name} pending={isConnecting} locked={pinBlockedUntil !== null} error={pinError} onSubmit={(pin) => void joinRoom(pinTarget.code, pin, pinTarget.name)} onClose={() => { setPinTarget(null); setPinError(null); }} />}
+      {pinTarget && (
+        <RoomPinDialog
+          key={pinTarget.code}
+          roomName={pinTarget.name}
+          pending={isConnecting}
+          locked={pinBlockedUntil !== null}
+          error={pinError}
+          onSubmit={(pin) => {
+            if (pinTarget.isSpectate) {
+              void spectateRoom(pinTarget.code, pin, pinTarget.name);
+            } else {
+              void joinRoom(pinTarget.code, pin, pinTarget.name);
+            }
+          }}
+          onClose={() => {
+            setPinTarget(null);
+            setPinError(null);
+          }}
+        />
+      )}
     </main>
   );
 }

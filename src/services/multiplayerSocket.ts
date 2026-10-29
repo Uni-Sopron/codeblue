@@ -24,6 +24,7 @@ export interface PublicRoomSummary {
   maxPlayers: 4;
   gameStarted: boolean;
   hasPin: boolean;
+  spectatorCount?: number;
 }
 export interface RemotePlayer {
   socketId: string;
@@ -48,6 +49,7 @@ export interface MultiplayerRoom {
   createdAt: string;
   rematchVotes?: Record<string, boolean>;
   disconnectTimeout?: { playerId: string; remainingSeconds: number } | null;
+  spectatorCount?: number;
 }
 export interface RoomResponse {
   success: boolean;
@@ -68,15 +70,16 @@ class MultiplayerSocketService {
   private reconnectTokens = new Map<string, string>();
   private roomSubscriptions = new Set<(rooms: PublicRoomSummary[]) => void>();
   private latestRooms: PublicRoomSummary[] = [];
+  private spectatorCountListeners = new Set<(count: number) => void>();
 
   private tokenKey(roomCode: string, playerId: string): string {
     return `codeblue:reconnect:${roomCode}:${playerId}`;
   }
   private remember(response: RoomResponse): void {
-    if (!response.success || !response.room || !response.player) return;
+    if (!response.success || !response.room) return;
     this.currentRoom = response.room;
-    this.myPlayer = response.player;
-    if (response.reconnectToken) {
+    if (response.player) this.myPlayer = response.player;
+    if (response.reconnectToken && response.player) {
       const key = this.tokenKey(response.room.code, response.player.id);
       this.reconnectTokens.set(key, response.reconnectToken);
       try { sessionStorage.setItem(key, response.reconnectToken); } catch { /* Storage can be disabled. */ }
@@ -117,6 +120,10 @@ class MultiplayerSocketService {
       };
       this.socket.on('rooms:list', onRooms);
       this.socket.on('rooms:update', onRooms);
+      this.socket.on('room:spectator_count', ({ spectatorCount }: { spectatorCount: number }) => {
+        if (this.currentRoom) this.currentRoom.spectatorCount = spectatorCount;
+        this.spectatorCountListeners.forEach((listener) => listener(spectatorCount));
+      });
       this.socket.on('room:update', ({ room }: { room: MultiplayerRoom }) => {
         if (room.code !== this.currentRoom?.code) return;
         this.currentRoom = room;
@@ -147,6 +154,18 @@ class MultiplayerSocketService {
   }
   public joinRoom(roomCode: string, playerName: string, avatarId: string, color: string, pin?: string): Promise<RoomResponse> {
     return this.request('room:join', { roomCode, playerName, avatarId, color, pin });
+  }
+  public spectateRoom(roomCode: string, pin?: string): Promise<RoomResponse> {
+    return this.request('room:spectate', { roomCode, pin });
+  }
+  public subscribeSpectatorCount(listener: (count: number) => void): () => void {
+    this.spectatorCountListeners.add(listener);
+    if (this.currentRoom?.spectatorCount !== undefined) {
+      listener(this.currentRoom.spectatorCount);
+    }
+    return () => {
+      this.spectatorCountListeners.delete(listener);
+    };
   }
   public addBot(roomCode: string): Promise<RoomResponse> {
     return this.request('room:add_bot', { roomCode });

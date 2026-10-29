@@ -61,11 +61,13 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
     })),
     gameStarted: room.gameStarted, gameState: room.gameState, createdAt: room.createdAt,
     rematchVotes: { ...room.rematchVotes },
+    spectatorCount: room.spectators ? room.spectators.size : 0,
   });
   const publicRooms = () => Array.from(rooms.values()).filter((r) => r.visibility === 'public').map((room) => {
     const host = room.players.find((p) => p.isHost) || room.players[0];
-    return { code: room.code, name: room.name, hostName: host.name, hostAvatar: host.avatar,
-      playerCount: room.players.length, maxPlayers: 4, gameStarted: room.gameStarted, hasPin: room.hasPin };
+    return { code: room.code, name: room.name, hostName: host?.name || 'Kórház', hostAvatar: host?.avatar || 'surgeon',
+      playerCount: room.players.length, maxPlayers: 4, gameStarted: room.gameStarted, hasPin: room.hasPin,
+      spectatorCount: room.spectators ? room.spectators.size : 0 };
   });
   const publishDirectory = () => io.to(DIRECTORY).emit('rooms:update', { rooms: publicRooms() });
   const publishRoom = (room) => io.to(room.code).emit('room:update', { room: roomView(room) });
@@ -165,13 +167,52 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
       const avatar = sanitizeAvatar(avatarId);
       const player = { socketId: socket.id, id: 'p1', name: hostName, avatar, avatarTitle: TITLES[avatar], color: sanitizeColor(color), isHost: true, connected: true };
       const room = { code, name: sanitizeName(name, `${hostName} Klinikája`, 24), visibility, hasPin: pin !== '', hostSocketId: socket.id,
-        players: [player], gameStarted: false, gameState: null, rematchVotes: {}, disconnectTimer: null, createdAt: new Date(now()).toISOString(), lastActive: now() };
+        players: [player], gameStarted: false, gameState: null, rematchVotes: {}, disconnectTimer: null, spectators: new Set(), createdAt: new Date(now()).toISOString(), lastActive: now() };
       const salt = randomBytes(16).toString('hex');
       secrets.set(code, { salt, pinHash: pin ? hash(pin, salt) : null, tokens: new Map() });
       rooms.set(code, room);
       socket.join(code);
       currentRoomCode = code;
       success(room, player, callback, 'room:created');
+      publishDirectory();
+    });
+
+    socket.on('room:spectate', (data = {}, callback) => {
+      if (!checkRate(callback)) return;
+      const { roomCode, pin } = data || {};
+      if (!isValidRoomCode(roomCode)) return fail(callback, 'Érvénytelen szobakód! (Példa: CB-4821)', 'INVALID_ROOM_CODE');
+      const room = rooms.get(roomCode.trim().toUpperCase());
+      if (!room) return fail(callback, 'A szoba nem található.', 'ROOM_NOT_FOUND');
+
+      const secret = secrets.get(room.code);
+      if (room.hasPin) {
+        if (pin === undefined || pin === '') return fail(callback, 'Add meg a szoba 4 jegyű PIN-kódját.', 'PIN_REQUIRED');
+        if (typeof pin !== 'string' || !safeEqual(hash(pin, secret.salt), secret.pinHash)) {
+          return fail(callback, 'Hibás PIN-kód.', 'PIN_INVALID');
+        }
+      }
+
+      leave(true);
+
+      if (!room.spectators) room.spectators = new Set();
+      room.spectators.add(socket.id);
+      currentRoomCode = room.code;
+      socket.join(room.code);
+      room.lastActive = now();
+
+      if (typeof callback === 'function') {
+        callback({
+          success: true,
+          room: roomView(room),
+          gameState: room.gameState,
+          spectatorCount: room.spectators.size,
+        });
+      }
+
+      io.to(room.code).emit('room:spectator_count', {
+        roomCode: room.code,
+        spectatorCount: room.spectators.size,
+      });
       publishDirectory();
     });
 
@@ -315,6 +356,19 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
       const room = currentRoomCode && rooms.get(currentRoomCode);
       currentRoomCode = null;
       if (!room) return;
+
+      if (room.spectators && room.spectators.has(socket.id)) {
+        room.spectators.delete(socket.id);
+        socket.leave(room.code);
+        room.lastActive = now();
+        io.to(room.code).emit('room:spectator_count', {
+          roomCode: room.code,
+          spectatorCount: room.spectators.size,
+        });
+        publishDirectory();
+        return;
+      }
+
       const index = room.players.findIndex((p) => p.socketId === socket.id);
       if (index < 0) return;
       const player = room.players[index];
@@ -342,7 +396,10 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
       publishDirectory();
     };
     socket.on('room:leave', (data = {}, callback) => {
-      if (!memberRoom(data?.roomCode)) return fail(callback, 'Nem vagy ennek a szobának a tagja.', 'NOT_A_MEMBER');
+      const targetCode = (data?.roomCode || currentRoomCode || '').trim().toUpperCase();
+      const room = rooms.get(targetCode);
+      const isMember = room && (room.players.some((p) => p.socketId === socket.id) || room.spectators?.has(socket.id));
+      if (!isMember) return fail(callback, 'Nem vagy ennek a szobának a tagja.', 'NOT_A_MEMBER');
       leave(true);
       if (typeof callback === 'function') callback({ success: true });
     });

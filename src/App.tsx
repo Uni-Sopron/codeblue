@@ -12,6 +12,8 @@ import {
   Menu,
   Bot,
   Pause,
+  Eye,
+  LogOut,
 } from 'lucide-react';
 import { BOARD_TILES } from './data/tiles.ts';
 import { AVATARS } from './data/avatars.ts';
@@ -127,6 +129,8 @@ export function App() {
   const onlineRoomCode = onlineRoom?.code;
   const [myRemotePlayer, setMyRemotePlayer] = useState<RemotePlayer | null>(null);
   const [onlineSocketId, setOnlineSocketId] = useState<string | null>(null);
+  const [isSpectator, setIsSpectator] = useState(false);
+  const [spectatorCount, setSpectatorCount] = useState(0);
   const [areBotsPaused, setAreBotsPaused] = useState(false);
   const [rematchVotes, setRematchVotes] = useState<Record<string, boolean>>({});
   const [turnTimeoutRemaining, setTurnTimeoutRemaining] = useState<number | null>(null);
@@ -147,12 +151,13 @@ export function App() {
   const isMyTurn = useMemo(() => {
     if (activePlayer?.isAI) return false;
     if (gameMode !== 'online') return true;
+    if (isSpectator) return false;
     if (!myRemotePlayer || !activePlayer || !onlineSocketId) return false;
     return activePlayer.id === myRemotePlayer.id;
-  }, [gameMode, myRemotePlayer, activePlayer, onlineSocketId]);
+  }, [gameMode, isSpectator, myRemotePlayer, activePlayer, onlineSocketId]);
 
   const isOnlineHost = !!onlineSocketId && onlineRoom?.hostSocketId === onlineSocketId;
-  const canDriveBots = gameMode === 'local' || (gameMode === 'online' && isOnlineHost);
+  const canDriveBots = !isSpectator && (gameMode === 'local' || (gameMode === 'online' && isOnlineHost));
   const botsPaused = areBotsPaused || isGameMenuOpen || isConfirmExitOpen || isRematchPromptOpen
     || isDevPanelOpen || isBankOpen || isClinicOpen;
   useBotPlayer(engine, { enabled: canDriveBots, paused: botsPaused });
@@ -175,12 +180,34 @@ export function App() {
     startGame(localConfigs);
   };
 
+  // Clean exit for spectators
+  const handleExitSpectate = useCallback(() => {
+    if (onlineRoom) {
+      multiplayerService.leaveRoom(onlineRoom.code);
+    }
+    setOnlineRoom(null);
+    setMyRemotePlayer(null);
+    setIsSpectator(false);
+    setSpectatorCount(0);
+    engine.resetGame();
+    setGameMode(null);
+    setToastMessage({
+      id: Date.now(),
+      text: '👁️ Sikeresen kiléptél a közvetítésből.',
+      type: 'info',
+    });
+  }, [onlineRoom, engine]);
+
   // Handle online game start callback from lobby
   const handleStartOnlineGame = useCallback(
-    (startedRoom: MultiplayerRoom, me: RemotePlayer) => {
+    (startedRoom: MultiplayerRoom, me: RemotePlayer | null, spectator = false) => {
       setGameMode('online');
+      setIsSpectator(spectator);
       setOnlineRoom(startedRoom);
       setMyRemotePlayer(me);
+      if (startedRoom.spectatorCount !== undefined) {
+        setSpectatorCount(startedRoom.spectatorCount);
+      }
 
       if (startedRoom.gameState) {
         isRemoteUpdateRef.current = true;
@@ -210,7 +237,10 @@ export function App() {
     const handleConnected = () => setOnlineSocketId(socket.id ?? null);
     const handleDisconnected = () => setOnlineSocketId(null);
     const handleRoomUpdated = ({ room }: { room: MultiplayerRoom }) => {
-      setOnlineRoom((previous) => previous?.code === room.code ? room : previous);
+      setOnlineRoom((previous) => (previous?.code === room.code ? room : previous));
+      if (room.spectatorCount !== undefined) {
+        setSpectatorCount(room.spectatorCount);
+      }
       const me = room.players.find((player) => player.socketId === socket.id);
       if (me) setMyRemotePlayer(me);
     };
@@ -224,6 +254,9 @@ export function App() {
     }) => {
       setGameMode('online');
       setOnlineRoom(startedRoom);
+      if (startedRoom.spectatorCount !== undefined) {
+        setSpectatorCount(startedRoom.spectatorCount);
+      }
       const me = startedRoom.players.find((p) => p.socketId === socket.id);
       if (me) setMyRemotePlayer(me);
       if (initialGameState) {
@@ -410,8 +443,12 @@ export function App() {
     socket.on('room:game_reset', handleGameReset);
     socket.on('turn:auto_passed', handleTurnAutoPassed);
     socket.on('room:player_left', handlePlayerLeft);
+    const unsubscribeSpectatorCount = multiplayerService.subscribeSpectatorCount((count) => {
+      setSpectatorCount(count);
+    });
 
     return () => {
+      unsubscribeSpectatorCount();
       socket.off('connect', handleConnected);
       socket.off('disconnect', handleDisconnected);
       socket.off('room:update', handleRoomUpdated);
@@ -433,10 +470,10 @@ export function App() {
       isRemoteUpdateRef.current = false;
       return;
     }
-    if (gameMode === 'online' && onlineRoomCode && gameState.phase !== 'setup') {
+    if (gameMode === 'online' && onlineRoomCode && gameState.phase !== 'setup' && !isSpectator) {
       multiplayerService.syncState(onlineRoomCode, gameState);
     }
-  }, [gameState, gameMode, onlineRoomCode]);
+  }, [gameState, gameMode, onlineRoomCode, isSpectator]);
 
   // Turn timeout countdown timer
   useEffect(() => {
@@ -514,6 +551,9 @@ export function App() {
     if (turnTimeoutRemaining !== null && turnTimeoutRemaining > 0) {
       return `⚠️ Játékos kapcsolata megszakadt! Automatikus körátadás ${turnTimeoutRemaining} mp múlva...`;
     }
+    if (isSpectator) {
+      return `👁️ Élő közvetítés · ${activePlayer?.name || 'Orvos'} köre van folyamatban${spectatorCount > 1 ? ` (${spectatorCount} néző)` : ''}`;
+    }
     if (activePlayer?.isAI) {
       return canDriveBots && botsPaused
         ? 'A bot szünetel.'
@@ -538,7 +578,18 @@ export function App() {
       return 'Eseménykártya felhúzva! Olvasd el a lapot a folytatáshoz (E vagy jóváhagyás).';
     }
     return undefined;
-  }, [turnTimeoutRemaining, gameMode, isMyTurn, gameState.phase, activePlayer, currentTile, canDriveBots, botsPaused]);
+  }, [
+    turnTimeoutRemaining,
+    gameMode,
+    isMyTurn,
+    isSpectator,
+    spectatorCount,
+    gameState.phase,
+    activePlayer,
+    currentTile,
+    canDriveBots,
+    botsPaused,
+  ]);
 
   return (
     <div className="app-container">
@@ -573,9 +624,18 @@ export function App() {
             <div className="header-online-badge">
               <Wifi size={14} />
               <span>Szoba: <strong>{onlineRoom.code}</strong></span>
-              {myRemotePlayer && (
+              {myRemotePlayer ? (
                 <span className="header-my-doctor" style={{ color: myRemotePlayer.color }}>
                   • {myRemotePlayer.name}
+                </span>
+              ) : isSpectator ? (
+                <span className="header-spectator-pill">
+                  <Eye size={13} aria-hidden="true" /> Közvetítés (Néző)
+                </span>
+              ) : null}
+              {spectatorCount > 0 && (
+                <span className="header-spectator-count-badge" title={`${spectatorCount} névtelen néző követi a közvetítést`}>
+                  <Eye size={12} aria-hidden="true" /> {spectatorCount} néző
                 </span>
               )}
             </div>
@@ -585,6 +645,17 @@ export function App() {
         {/* Global Toolbar Buttons */}
         {gameState.phase !== 'setup' && (
           <div className="header-actions">
+            {isSpectator && (
+              <button
+                type="button"
+                className="header-btn btn-exit-spectate"
+                onClick={handleExitSpectate}
+                title="Közvetítés elhagyása és visszatérés a szobaválasztóhoz"
+              >
+                <LogOut size={16} />
+                <span>Kilépés</span>
+              </button>
+            )}
             {canDriveBots && gameState.players.some((player) => player.isAI) && (
               <button
                 type="button"
@@ -843,6 +914,26 @@ export function App() {
 
               {/* Action Bar Beneath the Board */}
               <div className="board-turn-controls">
+                {isSpectator && (
+                  <div className="spectator-live-bar" role="status">
+                    <div className="spectator-live-bar-left">
+                      <span className="spectator-pulse-dot" />
+                      <Eye size={16} aria-hidden="true" />
+                      <span>
+                        <strong>Élő közvetítés</strong> · Névtelen nézőként követed a játékot.
+                        {spectatorCount > 1 ? ` Jelenleg ${spectatorCount} néző tekinti a mérkőzést.` : ''}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="spectator-exit-btn"
+                      onClick={handleExitSpectate}
+                      title="Vissza a szobaválasztóhoz"
+                    >
+                      <LogOut size={13} aria-hidden="true" /> Kilépés
+                    </button>
+                  </div>
+                )}
                 {!isMyTurn ? (
                   <div className="waiting-turn-badge">
                     <span className="pulse-dot" />
@@ -997,6 +1088,8 @@ export function App() {
             setOnlineRoom(null);
             setMyRemotePlayer(null);
           }
+          setIsSpectator(false);
+          setSpectatorCount(0);
           engine.resetGame();
           setGameMode(null);
         }}
@@ -1047,6 +1140,8 @@ export function App() {
             setOnlineRoom(null);
             setMyRemotePlayer(null);
           }
+          setIsSpectator(false);
+          setSpectatorCount(0);
           engine.resetGame();
           setGameMode(null);
         }}
@@ -1085,6 +1180,8 @@ export function App() {
             setOnlineRoom(null);
             setMyRemotePlayer(null);
           }
+          setIsSpectator(false);
+          setSpectatorCount(0);
           engine.resetGame();
           setGameMode(null);
         }}
