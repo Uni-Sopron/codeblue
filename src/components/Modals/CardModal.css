@@ -1,0 +1,331 @@
+/* Reset Box Sizing for all Modal Elements */
+.card-modal-backdrop,
+.card-modal-backdrop * {
+  box-sizing: border-box;
+}
+
+.card-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 7, 18, 0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  padding: 1rem;
+  animation: fadeInBackdrop 0.25s ease-out;
+}
+
+@keyframes fadeInBackdrop {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.card-modal-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  max-width: 440px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* 3D Flip Card Container */
+.card-flipper-scene {
+  width: min(320px, calc(100vw - 32px));
+  height: min(470px, calc(100vh - 120px));
+  perspective: 1000px;
+  perspective-origin: center center;
+  cursor: pointer;
+  margin: 0 auto;
+}
+
+.card-flipper-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transform-origin: center center;
+  transition: transform 0.65s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-flipper-inner.flipped {
+  transform: rotateY(180deg);
+}
+
+.card-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 20px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform-origin: center center;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.7), 0 0 25px rgba(14, 165, 233, 0.15);
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+}
+
+/* KÁRTYA HÁTLAP (Card Back) */
+.card-face-back {
+  background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+  transform: rotateY(0deg);
+  transform-origin: center center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.75rem;
+  text-align: center;
+  position: relative;
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.card-back-pattern {
+  position: absolute;
+  inset: 12px;
+  border: 1px dashed rgba(56, 189, 248, 0.25);
+  border-radius: 14px;
+  pointer-events: none;
+}
+
+.card-back-emblem {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(14, 165, 233, 0.15);
+  border: 2px solid #38bdf8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 0 25px rgba(56, 189, 248, 0.4);
+}
+
+.card-back-logo-text {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  background: linear-gradient(135deg, #38bdf8 0%, #bae6fd 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 0;
+}
+
+.card-back-subtext {
+  font-size: 0.8rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin-top: 0.25rem;
+}
+
+.card-back-hint {
+  margin-top: 2rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  animation: pulseHint 2s infinite;
+}
+
+@keyframes pulseHint {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* KÁRTYA ELŐLAP (Card Front) */
+.card-face-front {
+  transform: rotateY(180deg);
+  transform-origin: center center;
+  background: #0f172a;
+  padding: 1.5rem;
+  justify-content: space-between;
+}
+
+/* Kategória színek */
+.card-face-front.category-income {
+  background: linear-gradient(175deg, rgba(16, 185, 129, 0.2) 0%, #0f172a 40%);
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 0 30px rgba(16, 185, 129, 0.25);
+}
+
+.card-face-front.category-expense {
+  background: linear-gradient(175deg, rgba(239, 68, 68, 0.2) 0%, #0f172a 40%);
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.25);
+}
+
+.card-face-front.category-advantage {
+  background: linear-gradient(175deg, rgba(14, 165, 233, 0.2) 0%, #0f172a 40%);
+  border-color: rgba(14, 165, 233, 0.5);
+  box-shadow: 0 0 30px rgba(14, 165, 233, 0.25);
+}
+
+.card-face-front.category-disadvantage {
+  background: linear-gradient(175deg, rgba(245, 158, 11, 0.2) 0%, #0f172a 40%);
+  border-color: rgba(245, 158, 11, 0.5);
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.25);
+}
+
+.card-front-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.75rem;
+}
+
+.card-category-pill {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.card-category-pill.income {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.card-category-pill.expense {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.card-category-pill.advantage {
+  background: rgba(14, 165, 233, 0.2);
+  color: #38bdf8;
+  border: 1px solid rgba(14, 165, 233, 0.4);
+}
+
+.card-category-pill.disadvantage {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.card-number {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.card-front-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin: auto 0;
+  text-align: center;
+}
+
+.card-front-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.card-front-desc-box {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0.85rem;
+}
+
+.card-front-instruction {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.card-front-flavor {
+  font-size: 0.75rem;
+  font-style: italic;
+  color: #94a3b8;
+  line-height: 1.4;
+  margin: 0;
+  border-left: 2px solid rgba(56, 189, 248, 0.4);
+  padding-left: 0.6rem;
+  text-align: left;
+}
+
+.card-front-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.75rem;
+  display: flex;
+  justify-content: center;
+}
+
+.btn-card-action {
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 0.75rem 2rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 15px rgba(14, 165, 233, 0.35);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-card-action:hover {
+  background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5);
+}
+
+/* Mobile Responsive Card Layout */
+@media (max-width: 480px) {
+  .card-modal-backdrop {
+    padding: 0.5rem;
+  }
+  .card-flipper-scene {
+    width: min(290px, calc(100vw - 28px));
+    height: min(440px, calc(100vh - 100px));
+  }
+  .card-face-back {
+    padding: 1.25rem 1rem;
+  }
+  .card-face-front {
+    padding: 1rem 0.85rem;
+  }
+  .card-front-title {
+    font-size: 1.05rem;
+  }
+  .card-front-desc-box {
+    padding: 0.65rem;
+  }
+  .card-front-instruction {
+    font-size: 0.84rem;
+  }
+  .card-front-flavor {
+    font-size: 0.72rem;
+  }
+  .btn-card-action {
+    padding: 0.65rem 1.25rem;
+    font-size: 0.88rem;
+  }
+}

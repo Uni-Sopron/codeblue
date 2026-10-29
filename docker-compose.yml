@@ -1,0 +1,19 @@
+services:
+  codeblue-backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: codeblue-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+    networks:
+      - default
+      - proxy
+
+networks:
+  proxy:
+    name: nginx-proxy-network
+    external: true
