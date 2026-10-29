@@ -65,6 +65,7 @@ function withdrawToward(player: Player, targetCash: number): BotAction | null {
   if (player.cash >= targetCash) return null;
   const bank = getBankBalances(player);
   for (const product of BANK_PRODUCTS) {
+    if (product === 'clinicalBond' && (player.bondLockTurns ?? 0) > 0) continue;
     const amount = Math.min(bank[product], targetCash - player.cash);
     if (Number.isSafeInteger(amount) && amount > 0) return { type: 'withdraw', product, amount };
   }

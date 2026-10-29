@@ -382,3 +382,37 @@
     font-size: 0.7rem;
   }
 }
+
+.player-card.eliminated {
+  opacity: 0.42;
+  filter: grayscale(85%);
+  border-color: rgba(185, 28, 28, 0.45);
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.player-eliminated-tag {
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  background: rgba(153, 27, 27, 0.95);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  color: #fecaca;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.player-offline-tag.pulse {
+  animation: pulseOfflineFast 1s infinite;
+  background: rgba(220, 38, 38, 0.95);
+  border: 1px solid rgba(254, 202, 202, 0.6);
+}
+
+@keyframes pulseOfflineFast {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.75; }
+}

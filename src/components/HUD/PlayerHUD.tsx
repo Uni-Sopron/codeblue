@@ -13,6 +13,7 @@ interface PlayerHUDProps {
   selectedPlayerIndex?: number;
   onSelectPlayer?: (index: number) => void;
   myPlayerId?: string;
+  offlineTimer?: { playerId: string; seconds: number } | null;
 }
 
 export const PlayerHUD: React.FC<PlayerHUDProps> = ({
@@ -23,6 +24,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
   selectedPlayerIndex,
   onSelectPlayer,
   myPlayerId,
+  offlineTimer,
 }) => {
   if (players.length === 0) {
     return null;
@@ -57,16 +59,24 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
           const avatarInfo = getAvatarById(player.avatar);
           const builtCount = player.builtElements.length;
           const totalBuildings = GAME_CONSTANTS.TOTAL_CLINIC_ELEMENTS;
+          const isEliminated = player.eliminated === true;
+          const isOffline = player.connected === false && !isEliminated;
+          const isTimedOutPlayer = isOffline && offlineTimer?.playerId === player.id && offlineTimer.seconds > 0;
 
           return (
             <div
               key={player.id}
-              className={`player-card ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''} ${player.connected === false ? 'disconnected' : ''}`}
+              className={`player-card ${isActive && !isEliminated ? 'active' : ''} ${isSelected ? 'selected' : ''} ${isOffline ? 'disconnected' : ''} ${isEliminated ? 'eliminated' : ''}`}
               onClick={() => onSelectPlayer?.(index)}
               style={{ cursor: onSelectPlayer ? 'pointer' : 'default' }}
             >
-              {isActive && <span className="player-active-tag">Soron van</span>}
-              {player.connected === false && <span className="player-offline-tag">Offline</span>}
+              {isActive && !isEliminated && <span className="player-active-tag">Soron van</span>}
+              {isEliminated && <span className="player-eliminated-tag">Kiszállt</span>}
+              {isOffline && (
+                <span className={`player-offline-tag ${isTimedOutPlayer ? 'pulse' : ''}`}>
+                  {isTimedOutPlayer ? `Offline (${offlineTimer.seconds}s)` : 'Offline'}
+                </span>
+              )}
 
               <div className="player-header">
                 <div

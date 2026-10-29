@@ -134,6 +134,7 @@ export function App() {
   const [areBotsPaused, setAreBotsPaused] = useState(false);
   const [rematchVotes, setRematchVotes] = useState<Record<string, boolean>>({});
   const [turnTimeoutRemaining, setTurnTimeoutRemaining] = useState<number | null>(null);
+  const [turnTimeoutPlayerId, setTurnTimeoutPlayerId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ id: number; text: string; type: 'info' | 'warning' | 'success' } | null>(null);
   const isRemoteUpdateRef = useRef(false);
 
@@ -306,6 +307,7 @@ export function App() {
 
       if (timeoutSeconds) {
         setTurnTimeoutRemaining(timeoutSeconds);
+        setTurnTimeoutPlayerId(playerId);
       }
 
       setToastMessage({
@@ -331,6 +333,7 @@ export function App() {
       }));
 
       setTurnTimeoutRemaining(null);
+      setTurnTimeoutPlayerId(null);
 
       setToastMessage({
         id: Date.now(),
@@ -393,6 +396,7 @@ export function App() {
       setIsConfirmExitOpen(false);
       setRematchRequester(null);
       setTurnTimeoutRemaining(null);
+      setTurnTimeoutPlayerId(null);
       setOnlineRoom(resetRoom);
       isRemoteUpdateRef.current = true;
       setFullGameState(resetGameState);
@@ -403,13 +407,39 @@ export function App() {
       });
     };
 
+    const handlePlayerEliminated = ({
+      playerId,
+      playerName,
+    }: {
+      playerId: string;
+      playerName: string;
+      reason?: string;
+    }) => {
+      setTurnTimeoutRemaining(null);
+      setTurnTimeoutPlayerId(null);
+      isRemoteUpdateRef.current = true;
+      setFullGameState((prev: GameState) => ({
+        ...prev,
+        players: prev.players.map((p: Player) =>
+          p.id === playerId ? { ...p, connected: false, eliminated: true } : p
+        ),
+      }));
+      setToastMessage({
+        id: Date.now(),
+        text: `🚫 ${playerName} nem tért vissza időben, ezért végleg kiszállt a játékból!`,
+        type: 'warning',
+      });
+    };
+
     const handleTurnAutoPassed = ({
       gameState: updatedState,
     }: {
       newActivePlayerIndex: number;
       gameState: GameState;
+      eliminatedPlayerId?: string;
     }) => {
       setTurnTimeoutRemaining(null);
+      setTurnTimeoutPlayerId(null);
       if (updatedState) {
         isRemoteUpdateRef.current = true;
         setFullGameState(updatedState);
@@ -438,6 +468,7 @@ export function App() {
     socket.on('game:sync_broadcast', handleRemoteSync);
     socket.on('player:disconnected', handlePlayerDisconnected);
     socket.on('player:reconnected', handlePlayerReconnected);
+    socket.on('player:eliminated', handlePlayerEliminated);
     socket.on('room:rematch_update', handleRematchUpdate);
     socket.on('room:rematch_cancelled', handleRematchCancelled);
     socket.on('room:game_reset', handleGameReset);
@@ -456,6 +487,7 @@ export function App() {
       socket.off('game:sync_broadcast', handleRemoteSync);
       socket.off('player:disconnected', handlePlayerDisconnected);
       socket.off('player:reconnected', handlePlayerReconnected);
+      socket.off('player:eliminated', handlePlayerEliminated);
       socket.off('room:rematch_update', handleRematchUpdate);
       socket.off('room:rematch_cancelled', handleRematchCancelled);
       socket.off('room:game_reset', handleGameReset);
@@ -885,6 +917,7 @@ export function App() {
             activePlayerIndex={gameState.activePlayerIndex}
             turnNumber={gameState.turnNumber}
             myPlayerId={gameMode === 'online' ? myRemotePlayer?.id : undefined}
+            offlineTimer={turnTimeoutPlayerId && turnTimeoutRemaining ? { playerId: turnTimeoutPlayerId, seconds: turnTimeoutRemaining } : null}
           />
 
           <main className="app-main">

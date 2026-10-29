@@ -201,6 +201,11 @@ test('investments can provide exactly the missing cash for a reserve-safe buildi
   assert.deepEqual(chooseBotAction(context(doctor)), { type: 'withdraw', product: 'clinicalBond', amount: 50_000 });
 });
 
+test('the bot skips locked clinical bonds when calculating available withdrawals', () => {
+  const doctor = player({ cash: 500_000, bank: { savings: 0, clinicalBond: 100_000, biotechEquity: 0 }, bondLockTurns: 4 });
+  assert.deepEqual(chooseBotAction(context(doctor)), { type: 'end_turn' });
+});
+
 test('insufficient total assets do not cause a withdrawal/build/retry loop', () => {
   const doctor = player({ cash: 100_000, bank: { savings: 1, clinicalBond: 0, biotechEquity: 0 } });
   assert.deepEqual(chooseBotAction(context(doctor)), { type: 'end_turn' });

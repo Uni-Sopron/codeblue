@@ -90,3 +90,21 @@
   .bank-footer { padding: 13px 16px; }
 }
 @media (prefers-reduced-motion: reduce) { .bank-modal-card * { transition: none; } }
+
+
+.bank-lock-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(234, 179, 8, 0.15);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  color: #fde047;
+  padding: 6px 10px;
+  border-radius: 7px;
+  font-size: 11px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+.bank-lock-notice strong {
+  color: #ffffff;
+}

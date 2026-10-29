@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertCircle, ArrowDownLeft, ArrowUpRight, Landmark, PiggyBank, TrendingUp, Wallet, X } from 'lucide-react';
+import { AlertCircle, ArrowDownLeft, ArrowUpRight, Landmark, Lock, PiggyBank, TrendingUp, Wallet, X } from 'lucide-react';
 import type { BankProduct, Player } from '../../types/game.ts';
 import { GAME_CONSTANTS } from '../../types/game.ts';
 import { getBankBalances } from '../../utils/bank.ts';
@@ -34,12 +34,14 @@ interface ProductCardProps {
   canTransact: boolean;
   onDeposit: BankModalProps['onDeposit'];
   onWithdraw: BankModalProps['onWithdraw'];
+  lockedRemainingTurns?: number;
 }
 
-function ProductCard({ product, title, rate, description, balance, cash, canTransact, onDeposit, onWithdraw }: ProductCardProps) {
+function ProductCard({ product, title, rate, description, balance, cash, canTransact, onDeposit, onWithdraw, lockedRemainingTurns }: ProductCardProps) {
   const [amount, setAmount] = useState('100000');
   const value = /^\d+$/.test(amount) ? Number(amount) : 0;
   const validAmount = Number.isSafeInteger(value) && value > 0;
+  const isLocked = product === 'clinicalBond' && (lockedRemainingTurns ?? 0) > 0;
 
   return (
     <section className={`bank-product bank-product-${product}`}>
@@ -52,6 +54,12 @@ function ProductCard({ product, title, rate, description, balance, cash, canTran
         <span>Aktuális egyenleg</span>
         <strong>{formatAmount(balance)}</strong>
       </div>
+      {isLocked && (
+        <div className="bank-lock-notice" role="status">
+          <Lock size={13} aria-hidden="true" />
+          <span>Lekötve: még <strong>{lockedRemainingTurns} körig</strong> nem váltható vissza.</span>
+        </div>
+      )}
       <label className="bank-amount-label" htmlFor={`bank-amount-${product}`}>Összeg (KK)</label>
       <div className="bank-amount-row">
         <input id={`bank-amount-${product}`} type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="off" value={amount}
@@ -64,11 +72,13 @@ function ProductCard({ product, title, rate, description, balance, cash, canTran
         <button type="button" className="bank-button bank-button-primary" disabled={!canTransact || !validAmount || value > cash} onClick={() => onDeposit(product, value)}>
           <ArrowUpRight size={16} /> {product === 'savings' ? 'Befizetés' : 'Vásárlás'}
         </button>
-        <button type="button" className="bank-button bank-button-secondary" disabled={!canTransact || !validAmount || value > balance} onClick={() => onWithdraw(product, value)}>
-          <ArrowDownLeft size={16} /> {product === 'savings' ? 'Kivét' : 'Visszaváltás'}
+        <button type="button" className="bank-button bank-button-secondary" disabled={!canTransact || !validAmount || value > balance || isLocked} onClick={() => onWithdraw(product, value)} title={isLocked ? `A kötvény lekötve van (${lockedRemainingTurns} kör maradt)` : undefined}>
+          {isLocked ? <Lock size={15} /> : <ArrowDownLeft size={16} />} {product === 'savings' ? 'Kivét' : isLocked ? `Lekötve (${lockedRemainingTurns}k)` : 'Visszaváltás'}
         </button>
       </div>
-      <button type="button" className="bank-withdraw-all" disabled={!canTransact || balance <= 0} onClick={() => onWithdraw(product, balance)}>Teljes egyenleg kivétele</button>
+      <button type="button" className="bank-withdraw-all" disabled={!canTransact || balance <= 0 || isLocked} onClick={() => onWithdraw(product, balance)} title={isLocked ? `A kötvény lekötve van (${lockedRemainingTurns} kör maradt)` : undefined}>
+        {isLocked ? `Lekötött egyenleg (${lockedRemainingTurns} kör)` : 'Teljes egyenleg kivétele'}
+      </button>
     </section>
   );
 }
@@ -156,10 +166,10 @@ function BankDialog({ onClose, player, canTransact, onTakeLoan, onRepayLoan, onD
                 </section>
               </div>
             )}
-            {tab === 'savings' && <ProductCard product="savings" title="Megtakarítási betét" rate="+5% / START" description="Minden előre START-áthaladáskor 5% kamat kerül a betétedhez. Bármikor kiveheted a saját körödben." balance={balances.savings} cash={player.cash} canTransact={canTransact} onDeposit={onDeposit} onWithdraw={onWithdraw} />}
+            {tab === 'savings' && <ProductCard product="savings" title="Megtakarítási betét" rate="+3% / START" description="Minden előre START-áthaladáskor 3% kamat kerül a betétedhez. Bármikor kiveheted a saját körödben." balance={balances.savings} cash={player.cash} canTransact={canTransact} onDeposit={onDeposit} onWithdraw={onWithdraw} />}
             {tab === 'investments' && <div className="bank-investment-grid">
-              <ProductCard product="clinicalBond" title="Klinikai Kötvény" rate="+10% / START" description="Minden előre START-áthaladáskor 10% hozam kerül a kötvény egyenlegéhez." balance={balances.clinicalBond} cash={player.cash} canTransact={canTransact} onDeposit={onDeposit} onWithdraw={onWithdraw} />
-              <ProductCard product="biotechEquity" title="Biotech Részvény" rate="−10%…+20%" description="START-áthaladáskor −10%, −5%, 0%, +10% vagy +20% változás, egyenlő eséllyel." balance={balances.biotechEquity} cash={player.cash} canTransact={canTransact} onDeposit={onDeposit} onWithdraw={onWithdraw} />
+              <ProductCard product="clinicalBond" title="Klinikai Kötvény" rate="+7% / START" description="Minden előre START-áthaladáskor 7% hozam kerül a kötvény egyenlegéhez. Vásárláskor 7 körre lekötésre kerül (moratórium)." balance={balances.clinicalBond} cash={player.cash} canTransact={canTransact} onDeposit={onDeposit} onWithdraw={onWithdraw} lockedRemainingTurns={player.bondLockTurns} />
+              <ProductCard product="biotechEquity" title="Biotech Részvény" rate="−8%…+15%" description="START-áthaladáskor −8%, −4%, 0%, +6%, +12% vagy +15% változás, egyenlő eséllyel." balance={balances.biotechEquity} cash={player.cash} canTransact={canTransact} onDeposit={onDeposit} onWithdraw={onWithdraw} />
             </div>}
           </div>
           {tab !== 'loans' && <p className="bank-notice">A hozam egész KK-ra kerekítve az egyenleghez kerül. Építkezéshez és a győzelemhez előbb váltsd készpénzre.</p>}

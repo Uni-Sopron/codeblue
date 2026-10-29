@@ -245,10 +245,12 @@ test('A disconnected active human is skipped to the next bot and per-turn constr
   assert.equal(state.activePlayerIndex, 1);
   assert.equal(state.players[1].isAI, true);
   assert.equal(state.builtThisTurn, false);
+  assert.equal(state.players[0].eliminated, true);
+  assert.equal(state.players[0].connected, false);
   const returned = await connect();
   const result = await request(returned, 'room:reconnect', { roomCode: room.roomCode, playerId: 'p1', reconnectToken: room.reconnectToken });
-  assert(result.success);
-  assert.equal((await sync(guest, returned, room.roomCode, { ...state, phase: 'building' })).phase, 'building');
+  assert.equal(result.success, false);
+  assert.equal(result.errorCode, 'PLAYER_ELIMINATED');
 });
 
 test('Explicit host departure also hands a pending bot turn to the remaining human host', async (t) => {

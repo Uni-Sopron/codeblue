@@ -244,6 +244,7 @@ test('Disconnect watchdog advances in circular turn order, resets pending action
   assert.equal(next.gameState.drawnCard, null);
   assert.equal(next.gameState.diceResult, null);
   assert.equal(next.gameState.players[1].connected, false);
+  assert.equal(next.gameState.players[1].eliminated, true);
   assert.equal(next.gameState.turnNumber, 1);
 });
 

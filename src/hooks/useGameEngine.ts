@@ -487,6 +487,8 @@ export function useGameEngine() {
           activeBuffs: [],
           isAI: !!cfg.isAI,
           bank: getBankBalances(null),
+          bondLockTurns: 0,
+          eliminated: false,
         };
       });
 
@@ -1083,11 +1085,32 @@ rollTimer.current = setTimeout(() => {
       }
 
       const updatedPlayers = [...prev.players];
+
+      // A most befejezett kör orvosának kötvény-zárolási idejének csökkentése (ha van)
+      const finishedPlayer = updatedPlayers[prev.activePlayerIndex];
+      if (finishedPlayer && typeof finishedPlayer.bondLockTurns === 'number' && finishedPlayer.bondLockTurns > 0) {
+        updatedPlayers[prev.activePlayerIndex] = {
+          ...finishedPlayer,
+          bondLockTurns: finishedPlayer.bondLockTurns - 1,
+        };
+      }
+
       let nextP = { ...updatedPlayers[nextIndex] };
       const skipLogs: GameLog[] = [];
 
-      // Körből kimaradás ellenőrzése a következő játékosnál
-      while (nextP.skipTurns > 0) {
+      // Körből kimaradás és kiesett státusz ellenőrzése a következő játékosnál
+      let searchIterations = 0;
+      while ((nextP.skipTurns > 0 || nextP.eliminated) && searchIterations < updatedPlayers.length) {
+        searchIterations++;
+        if (nextP.eliminated) {
+          nextIndex = (nextIndex + 1) % prev.players.length;
+          if (nextIndex === 0) {
+            nextTurnNumber += 1;
+          }
+          nextP = { ...updatedPlayers[nextIndex] };
+          continue;
+        }
+
         skipLogs.push({
           id: createLogId(),
           playerId: nextP.id,
@@ -1158,6 +1181,8 @@ rollTimer.current = setTimeout(() => {
         skipTurns: 0,
         activeBuffs: [],
         bank: getBankBalances(null),
+        bondLockTurns: 0,
+        eliminated: false,
       }));
       return {
         ...prev,

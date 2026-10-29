@@ -57,7 +57,7 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
     code: room.code, name: room.name, visibility: room.visibility, hasPin: room.hasPin,
     hostSocketId: room.hostSocketId, players: room.players.map((p) => ({
       socketId: p.socketId, id: p.id, name: p.name, avatar: p.avatar, avatarTitle: p.avatarTitle,
-      color: p.color, isHost: p.isHost, connected: p.connected, ...(p.isAI ? { isAI: true } : {}),
+      color: p.color, isHost: p.isHost, connected: p.connected, eliminated: p.eliminated ?? false, ...(p.isAI ? { isAI: true } : {}),
     })),
     gameStarted: room.gameStarted, gameState: room.gameState, createdAt: room.createdAt,
     rematchVotes: { ...room.rematchVotes },
@@ -90,17 +90,32 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
     room.disconnectTimer = setTimeout(() => {
       room.disconnectTimer = null;
       if (!rooms.has(room.code) || active.connected || room.gameState?.players[room.gameState.activePlayerIndex]?.id !== active.id) return;
+      
+      // Mark player permanently eliminated
+      active.eliminated = true;
+      active.connected = false;
+      if (room.gameState) {
+        room.gameState = {
+          ...room.gameState,
+          players: room.gameState.players.map((p) =>
+            p.id === active.id ? { ...p, connected: false, eliminated: true } : p
+          ),
+        };
+      }
+
       let next = -1;
       for (let offset = 1; offset < room.gameState.players.length; offset++) {
         const index = (room.gameState.activePlayerIndex + offset) % room.gameState.players.length;
-        if (room.players.some((p) => p.id === room.gameState.players[index].id && p.connected)) { next = index; break; }
+        const candidate = room.gameState.players[index];
+        if (!candidate.eliminated && room.players.some((p) => p.id === candidate.id && p.connected)) { next = index; break; }
       }
       if (next === -1) return;
       const previousIndex = room.gameState.activePlayerIndex;
       room.gameState = { ...room.gameState, activePlayerIndex: next, phase: 'roll', diceResult: null, isRolling: false, drawnCard: null,
         roundPassBonusGranted: false, builtThisTurn: false, turnNumber: room.gameState.turnNumber + (next <= previousIndex ? 1 : 0) };
+      io.to(room.code).emit('player:eliminated', { playerId: active.id, playerName: active.name, reason: 'timeout' });
       io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
-      io.to(room.code).emit('turn:auto_passed', { newActivePlayerIndex: next, gameState: room.gameState });
+      io.to(room.code).emit('turn:auto_passed', { newActivePlayerIndex: next, gameState: room.gameState, eliminatedPlayerId: active.id });
     }, disconnectTimeoutMs);
     room.disconnectTimer.unref?.();
   };
@@ -306,6 +321,7 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
       const player = room && room.players.find((p) => p.id === playerId && !p.isAI);
       const expected = room && secrets.get(room.code)?.tokens.get(playerId);
       if (!player || typeof reconnectToken !== 'string' || !safeEqual(hash(reconnectToken), expected)) return fail(callback, 'A visszacsatlakozási azonosító érvénytelen.', 'INVALID_RECONNECT');
+      if (player.eliminated) return fail(callback, 'Az offline limit lejárt, a játékból végleg kiszálltál.', 'PLAYER_ELIMINATED');
       if (player.connected) return fail(callback, 'A játékos már csatlakozva van.', 'PLAYER_CONNECTED');
       player.socketId = socket.id;
       player.connected = true;

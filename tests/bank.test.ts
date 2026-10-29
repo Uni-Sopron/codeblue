@@ -93,8 +93,8 @@ test('partial withdrawal transfers the exact requested amount back to cash', () 
 
 test('full withdrawal includes accrued interest and empties savings', () => {
   const accrued = accrueBankAtStart(player({ cash: 0, bank: { savings: 100_000, clinicalBond: 0, biotechEquity: 0 } })).player;
-  const next = applyBankTransaction(state({ players: [accrued] }), { type: 'withdraw', product: 'savings', amount: 105_000 });
-  assert.equal(next.players[0].cash, 105_000);
+  const next = applyBankTransaction(state({ players: [accrued] }), { type: 'withdraw', product: 'savings', amount: 103_000 });
+  assert.equal(next.players[0].cash, 103_000);
   assert.equal(next.players[0].bank?.savings, 0);
 });
 
@@ -220,11 +220,11 @@ test('loan and repayment reject corrupt wallet values and overflowing balances',
   ]) assert.equal(applyBankTransaction(initial, { type: 'borrow', amount: 200_000 }), initial);
 });
 
-test('START accrual credits savings 5% and clinical bonds 10% without changing cash or debt', () => {
+test('START accrual credits savings 3% and clinical bonds 7% without changing cash or debt', () => {
   const initial = player({ debt: 200_000, bank: { savings: 100_000, clinicalBond: 200_000, biotechEquity: 0 } });
   const result = accrueBankAtStart(initial);
-  assert.deepEqual(result.player.bank, { savings: 105_000, clinicalBond: 220_000, biotechEquity: 0 });
-  assert.deepEqual(result.returns, { savings: 5_000, clinicalBond: 20_000, biotechEquity: 0 });
+  assert.deepEqual(result.player.bank, { savings: 103_000, clinicalBond: 214_000, biotechEquity: 0 });
+  assert.deepEqual(result.returns, { savings: 3_000, clinicalBond: 14_000, biotechEquity: 0 });
   assert.equal(result.player.cash, initial.cash);
   assert.equal(result.player.debt, initial.debt);
 });
@@ -232,10 +232,17 @@ test('START accrual credits savings 5% and clinical bonds 10% without changing c
 test('successive forward START crossings compound previously credited returns', () => {
   const initial = player({ bank: { savings: 10_000, clinicalBond: 10_000, biotechEquity: 0 } });
   const twice = accrueBankAtStart(accrueBankAtStart(initial).player).player;
-  assert.deepEqual(twice.bank, { savings: 11_025, clinicalBond: 12_100, biotechEquity: 0 });
+  assert.deepEqual(twice.bank, { savings: 10_609, clinicalBond: 11_449, biotechEquity: 0 });
 });
 
-for (const [sample, expected] of [[0, 90_000], [0.2, 95_000], [0.4, 100_000], [0.6, 110_000], [0.99999, 120_000]]) {
+for (const [sample, expected] of [
+  [0, 92_000],
+  [0.2, 96_000],
+  [0.4, 100_000],
+  [0.55, 106_000],
+  [0.75, 112_000],
+  [0.95, 115_000],
+]) {
   test(`injected biotech RNG ${sample} produces the bounded expected balance ${expected}`, () => {
     const initial = player({ bank: { savings: 0, clinicalBond: 0, biotechEquity: 100_000 } });
     const result = accrueBankAtStart(initial, () => sample);
@@ -260,7 +267,7 @@ test('empty biotech account consumes no random sample', () => {
 
 test('fractional returns round to the nearest whole KK, including losses', () => {
   const result = accrueBankAtStart(player({ bank: { savings: 10, clinicalBond: 15, biotechEquity: 15 } }), () => 0);
-  assert.deepEqual(result.player.bank, { savings: 11, clinicalBond: 17, biotechEquity: 14 });
+  assert.deepEqual(result.player.bank, { savings: 10, clinicalBond: 16, biotechEquity: 14 });
 });
 
 test('returns never overflow the safe integer balance limit', () => {
@@ -271,12 +278,12 @@ test('returns never overflow the safe integer balance limit', () => {
 
 test('a forward move that lands exactly on START accrues once', () => {
   const initial = player({ position: 35, bank: { savings: 100_000, clinicalBond: 0, biotechEquity: 0 } });
-  assert.equal(accrueBankForMovement(initial, 1).player.bank?.savings, 105_000);
+  assert.equal(accrueBankForMovement(initial, 1).player.bank?.savings, 103_000);
 });
 
 test('forward card movement across START uses the same accrual as a dice crossing', () => {
   const initial = player({ position: 34, bank: { savings: 100_000, clinicalBond: 0, biotechEquity: 0 } });
-  assert.equal(accrueBankForMovement(initial, 3).player.bank?.savings, 105_000);
+  assert.equal(accrueBankForMovement(initial, 3).player.bank?.savings, 103_000);
 });
 
 test('processing START landing after the movement cannot accrue the same return twice', () => {
@@ -284,7 +291,7 @@ test('processing START landing after the movement cannot accrue the same return 
   const landed = { ...moved, position: 0 };
   const resolved = accrueBankForMovement(landed, 0);
   assert.equal(resolved.player, landed);
-  assert.equal(resolved.player.bank?.savings, 105_000);
+  assert.equal(resolved.player.bank?.savings, 103_000);
   assert.deepEqual(resolved.returns, { savings: 0, clinicalBond: 0, biotechEquity: 0 });
 });
 
@@ -304,7 +311,7 @@ test('malformed or unbounded movement cannot produce repeated interest', () => {
 
 test('a START card from another tile earns one period; a jump from START to itself earns none', () => {
   const initial = player({ position: 9, bank: { savings: 100_000, clinicalBond: 0, biotechEquity: 0 } });
-  assert.equal(accrueBankForMovement(initial, 36 - initial.position).player.bank?.savings, 105_000);
+  assert.equal(accrueBankForMovement(initial, 36 - initial.position).player.bank?.savings, 103_000);
   const alreadyAtStart = { ...initial, position: 0 };
   assert.equal(accrueBankForMovement(alreadyAtStart, 0).player, alreadyAtStart);
 });
@@ -317,7 +324,7 @@ test('bank transactions and accrual leave frozen input portfolios unchanged', ()
   Object.freeze(next.players[0].bank);
   const accrued = accrueBankAtStart(next.players[0]);
   assert.equal(next.players[0].bank?.savings, 100_000);
-  assert.equal(accrued.player.bank?.savings, 105_000);
+  assert.equal(accrued.player.bank?.savings, 103_000);
 });
 
 test('portfolios survive GameState JSON serialization for multiplayer synchronization', () => {
@@ -326,4 +333,23 @@ test('portfolios survive GameState JSON serialization for multiplayer synchroniz
   assert.deepEqual(getBankBalances(remote.players[0]), { savings: 0, clinicalBond: 0, biotechEquity: 123_456 });
   assert.equal(remote.players[0].cash, 876_544);
   assert.equal(remote.players[1].cash, 1_000_000);
+});
+
+test('clinical bond purchase sets bondLockTurns to 7 and strictly rejects early withdrawal', () => {
+  const initial = state({ players: [player({ cash: 500_000, bank: { savings: 0, clinicalBond: 0, biotechEquity: 0 } })] });
+  const deposited = applyBankTransaction(initial, { type: 'deposit', product: 'clinicalBond', amount: 200_000 });
+  assert.equal(deposited.players[0].bank?.clinicalBond, 200_000);
+  assert.equal(deposited.players[0].bondLockTurns, 7);
+
+  // Early withdrawal while bondLockTurns > 0 must be rejected
+  const earlyWithdraw = applyBankTransaction(deposited, { type: 'withdraw', product: 'clinicalBond', amount: 50_000 });
+  assert.equal(earlyWithdraw, deposited);
+  assert.equal(earlyWithdraw.players[0].bank?.clinicalBond, 200_000);
+
+  // Once bondLockTurns reaches 0, withdrawal succeeds
+  const mature = { ...deposited, players: [{ ...deposited.players[0], bondLockTurns: 0 }] };
+  const matureWithdraw = applyBankTransaction(mature, { type: 'withdraw', product: 'clinicalBond', amount: 200_000 });
+  assert.equal(matureWithdraw.players[0].bank?.clinicalBond, 0);
+  assert.equal(matureWithdraw.players[0].bondLockTurns, 0);
+  assert.equal(matureWithdraw.players[0].cash, 500_000);
 });

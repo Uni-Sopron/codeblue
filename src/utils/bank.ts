@@ -1,8 +1,9 @@
 import type { BankBalances, BankProduct, GameState, Player } from '../types/game.ts';
 import { GAME_CONSTANTS } from '../types/game.ts';
 
-export const BANK_RATES = { savings: 0.05, clinicalBond: 0.1 } as const;
-export const BIOTECH_RETURNS = [-0.1, -0.05, 0, 0.1, 0.2] as const;
+export const BANK_RATES = { savings: 0.03, clinicalBond: 0.07 } as const;
+export const CLINICAL_BOND_LOCK_ROUNDS = 7;
+export const BIOTECH_RETURNS = [-0.08, -0.04, 0, 0.06, 0.12, 0.15] as const;
 export const BANK_PRODUCTS: readonly BankProduct[] = ['savings', 'clinicalBond', 'biotechEquity'];
 
 export type BankTransaction =
@@ -47,18 +48,26 @@ export function applyBankTransaction(state: GameState, action: BankTransaction):
   const bank = getBankBalances(player);
   let cash = player.cash;
   let debt = player.debt;
+  let bondLockTurns = player.bondLockTurns ?? 0;
   switch (action.type) {
     case 'deposit':
       if (!BANK_PRODUCTS.includes(action.product) || action.amount > cash
         || !validBalance(bank[action.product] + action.amount)) return state;
       bank[action.product] += action.amount;
       cash -= action.amount;
+      if (action.product === 'clinicalBond') {
+        bondLockTurns = CLINICAL_BOND_LOCK_ROUNDS;
+      }
       break;
     case 'withdraw':
       if (!BANK_PRODUCTS.includes(action.product) || action.amount > bank[action.product]
         || !validBalance(cash + action.amount)) return state;
+      if (action.product === 'clinicalBond' && bondLockTurns > 0) return state;
       bank[action.product] -= action.amount;
       cash += action.amount;
+      if (action.product === 'clinicalBond' && bank.clinicalBond === 0) {
+        bondLockTurns = 0;
+      }
       break;
     case 'borrow': {
       const rounded = Math.ceil(action.amount / GAME_CONSTANTS.LOAN_UNIT) * GAME_CONSTANTS.LOAN_UNIT;
@@ -80,7 +89,7 @@ export function applyBankTransaction(state: GameState, action: BankTransaction):
   }
 
   const players = [...state.players];
-  players[state.activePlayerIndex] = { ...player, cash, debt, bank };
+  players[state.activePlayerIndex] = { ...player, cash, debt, bank, bondLockTurns };
   return { ...state, players };
 }
 
@@ -95,8 +104,8 @@ export function accrueBankAtStart(player: Player, random: () => number = Math.ra
   const before = getBankBalances(player);
   const bank = { ...before };
   let biotechRate: number | null = null;
-  bank.savings = balanceAfterReturn(before.savings, 5);
-  bank.clinicalBond = balanceAfterReturn(before.clinicalBond, 10);
+  bank.savings = balanceAfterReturn(before.savings, 3);
+  bank.clinicalBond = balanceAfterReturn(before.clinicalBond, 7);
   if (before.biotechEquity > 0) {
     const sample = random();
     // Sérült RNG esetén 0%: a hibás bemenetből nem származhat szélsőséges hozam.

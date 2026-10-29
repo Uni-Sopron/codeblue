@@ -58,6 +58,8 @@ export interface Player {
   activeBuffs: ActiveBuff[];
   isAI?: boolean;
   bank?: BankBalances;    // Régi mentésekből hiányozhat; a motor nullás egyenleggel tölti fel.
+  bondLockTurns?: number; // Klinikai kötvény visszaváltási zárolása (pl. 7 kör)
+  eliminated?: boolean;   // Végleg kiszállt a játékból (pl. offline időtúllépés miatt)
   connected?: boolean;
   isHost?: boolean;
 }

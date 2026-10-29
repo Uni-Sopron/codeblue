@@ -21,7 +21,7 @@
 11. [Technológiai Stack és Architektúra](#11-technológiai-stack-és-architektúra)
 12. [Telepítés és Helyi Futtatás](#12-telepítés-és-helyi-futtatás)
 13. [Docker és Éles Üzembe Helyezés (OCI)](#13-docker-és-éles-üzembe-helyezés-oci)
-14. [Tesztelés és Kódminőség (155 Teszt)](#14-tesztelés-és-kódminőség-155-teszt)
+14. [Tesztelés és Kódminőség (158 Teszt)](#14-tesztelés-és-kódminőség-158-teszt)
 15. [Készítők és Licenc](#15-készítők-és-licenc)
 
 ---
@@ -83,7 +83,7 @@ A játék 4 rugalmas módban élvezhető:
 - **Többeszközös élmény:** Akár 4 játékos játszhat egyidejűleg külön mobiltelefonról, táblagépről vagy laptopról.
 - **Egyedi 4-jegyű szobakódok:** Gyors szobanyitás (pl. `CB-8421`) és azonnali csatlakozás.
 - **Szerverkapacitás:** A backend optimalizált memóriakezeléssel akár **50 párhuzamos játékszobát** képes egyidejűleg kiszolgálni.
-- **Újracsatlakozás és lecsatlakozás-védelem:** Ha egy játékos netkapcsolata megszakad, 30 másodperces visszaszámláló indul; az állapot automatikusan szinkronizálódik a visszatéréskor.
+- **Újracsatlakozás és lecsatlakozás-védelem:** Ha egy játékos netkapcsolata megszakad, a játékos kártyáján a felső HUD-ban megjelenik a valós idejű **`[OFFLINE (30s)]`** visszaszámláló. Ha a 30 másodperc lejár, a játékos **végleg kiszáll a mérkőzésből** (`[KISZÁLLT]` jelvény), köre automatikusan átadásra kerül, és többé nem tehet lépéseket (csak nézőként követheti a játékot).
 - **Szavazásos visszavágó rendszer (Rematch):** A meccs végén egyetlen kattintással újraindítható a parti azonos játékosokkal.
 
 ### 2. 👥 Helyi Játék (Hotseat)
@@ -176,20 +176,25 @@ A magánklinika tervrajza 8 kulcsfontosságú orvosi részlegből áll. A győze
 
 A fejléc **„Bank”** gombjával elérhető a **Klinikai Bank** központi felülete, ahol a játékosok valós gazdasági tranzakciókat hajthatnak végre:
 
-### 1. 💰 Megtakarítási Betét (Kamatozó)
+### 1. 💰 Megtakarítási Betét (+3% / START)
 
 - A felesleges készpénz bármikor leköthető a banknál.
-- A megtakarítás **körönként fix kamatot termel**, és védve van a készpénzt érintő váratlan eseményektől.
-- Bármikor díjmentesen visszaváltható likvid készpénzre.
+- Minden előre haladó START-áthaladáskor **+3% fix kamat** kerül az egyenleghez.
+- Védve van a készpénzt érintő váratlan negatív eseményektől, és a játékos saját körében bármikor visszaváltható.
 
-### 2. 📜 Kórházfejlesztési Kötvény & 📈 Klinikai Részvény
+### 2. 📜 Klinikai Kötvény (+7% / START, 7 körös lekötés)
 
-- Magasabb hozamú pénzügyi eszközök a hosszú távon gondolkodó orvos-befektetők számára.
+- Hosszú távú beruházási eszköz: minden előre haladó START-áthaladáskor **+7% hozamot** biztosít.
+- **7 körös visszaváltási moratórium:** A vásárlástól számítva 7 körön át zárolva van, ezalatt nem váltható vissza készpénzre. A lejárat után szabadon felszabadítható.
 
-### 3. 💳 Likviditási Hitel (Banki Kölcsön)
+### 3. 📈 Biotech Részvény (−8%…+15% / START)
+
+- Nagy hozamlehetőségű, de kockázatos klinikai részvénycsomag.
+- Minden START-áthaladáskor véletlenszerűen módosul: **`−8%`, `−4%`, `0%`, `+6%`, `+12%` vagy `+15%`** hozammal, egyenlő (16,67%) eséllyel.
+
+### 4. 💳 Likviditási Hitel (Banki Kölcsön)
 
 - Ha egy játékosnak gyorsan tőkére van szüksége egy drága részleg (pl. Műtőblokk vagy ITO) felépítéséhez, hitelt vehet fel 100 000 KK-s lépcsőkben.
-- **Kamatfizetési kötelezettség:** A hitel után kamat terheli a játékost.
 - **A Győzelem Záloga:** A játékot **nem lehet megnyerni fennálló hiteltartozással**! A győzelemhez a hitelt maradéktalanul vissza kell törleszteni.
 
 ---
@@ -321,9 +326,9 @@ A backend konténer a 3001-es porton indul el, és közvetlenül illeszkedik a m
 
 ---
 
-## 14. Tesztelés és Kódminőség (155 Teszt)
+## 14. Tesztelés és Kódminőség (158 Teszt)
 
-A projekt a Node.js beépített natív tesztfuttatóját (`node --test`) használja, amely villámgyorsan, külső nehézkes könyvtárak nélkül futtat le **155 kiterjedt egységtesztet**:
+A projekt a Node.js beépített natív tesztfuttatóját (`node --test`) használja, amely villámgyorsan, külső nehézkes könyvtárak nélkül futtat le **158 kiterjedt egységtesztet**:
 
 ```bash
 # Egységtesztek futtatása (játékmotor, bank, bot stratégia, hangok, szanitáció, szobainvariánsok)
@@ -338,7 +343,9 @@ npm run build
 
 ### ✅ Tesztelési Lefedettség
 
-- **155 / 155 automatizált teszt sikeres (0 hiba):**
+- **158 / 158 automatizált teszt sikeres (0 hiba):**
+  - Banki egyensúly: 3% megtakarítás, 7% kötvény 7 körös visszaváltási moratóriummal, és Biotech 6-kimenetelű hozamspektrum (-8%..+15%).
+  - Offline HUD számláló és végleges kiszállás: 30 mp-es limit lejártakor kiesés (`eliminated: true`), automatikus körátadás és visszacsatlakozási zárolás.
   - Névtelen Spectator közvetítés: nézőszámláló broadcast, PIN-védelem és állapotmutáció-megtagadás.
   - Játékmotor fázisátmenetek, kockadobás, mezőhatások és győzelmi feltételek.
   - Klinikai Bank: kamatszámítás, betételhelyezés, hitelfelvétel és törlesztési invariánsok.
