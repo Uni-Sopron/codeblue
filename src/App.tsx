@@ -44,6 +44,7 @@ import { RematchPromptModal } from './components/Modals/RematchPromptModal.tsx';
 import { DevPanel } from './components/DevTools/DevPanel.tsx';
 import { DevAuthModal } from './components/Modals/DevAuthModal.tsx';
 import { isDevModeStored, setDevModeStored } from './utils/devTools.ts';
+import { mergeOfflineDeadlines, remainingOfflineSeconds, pruneOfflineDeadlines } from './utils/offlineTimers.ts';
 import './App.css';
 
 const PHASE_LABELS: Record<GamePhase, string> = {
@@ -60,7 +61,7 @@ const PHASE_LABELS: Record<GamePhase, string> = {
 
 export function App() {
   const engine = useGameEngine();
-  const { gameState, activePlayer, startGame, setFullGameState } = engine;
+  const { gameState, activePlayer, startGame, setFullGameState, resetGame } = engine;
   const audio = useGameAudio(gameState);
 
   // Modal and panel visibility states
@@ -133,9 +134,14 @@ export function App() {
   const [spectatorCount, setSpectatorCount] = useState(0);
   const [areBotsPaused, setAreBotsPaused] = useState(false);
   const [rematchVotes, setRematchVotes] = useState<Record<string, boolean>>({});
-  const [offlineTimers, setOfflineTimers] = useState<Record<string, number>>({});
-  const [turnTimeoutRemaining, setTurnTimeoutRemaining] = useState<number | null>(null);
-  const [turnTimeoutPlayerId, setTurnTimeoutPlayerId] = useState<string | null>(null);
+  const [offlineDeadlines, setOfflineDeadlines] = useState<Record<string, number>>({});
+  const [offlineNow, setOfflineNow] = useState(Date.now);
+  const offlineTimers = useMemo(() => remainingOfflineSeconds(offlineDeadlines, offlineNow), [offlineDeadlines, offlineNow]);
+  const hydrateOfflineTimers = useCallback((seconds: Record<string, number> = {}) => {
+    const now = Date.now();
+    setOfflineNow(now);
+    setOfflineDeadlines((previous) => mergeOfflineDeadlines(previous, seconds, now));
+  }, []);
   const [toastMessage, setToastMessage] = useState<{ id: number; text: string; type: 'info' | 'warning' | 'success' } | null>(null);
   const isRemoteUpdateRef = useRef(false);
 
@@ -151,7 +157,7 @@ export function App() {
 
   // Determine if it is currently my turn
   const isMyTurn = useMemo(() => {
-    if (activePlayer?.isAI) return false;
+    if (activePlayer?.isAI || activePlayer?.eliminated || activePlayer?.connected === false) return false;
     if (gameMode !== 'online') return true;
     if (isSpectator) return false;
     if (!myRemotePlayer || !activePlayer || !onlineSocketId) return false;
@@ -191,14 +197,15 @@ export function App() {
     setMyRemotePlayer(null);
     setIsSpectator(false);
     setSpectatorCount(0);
-    engine.resetGame();
+    setOfflineDeadlines({});
+    resetGame();
     setGameMode(null);
     setToastMessage({
       id: Date.now(),
       text: '👁️ Sikeresen kiléptél a közvetítésből.',
       type: 'info',
     });
-  }, [onlineRoom, engine]);
+  }, [onlineRoom, resetGame]);
 
   // Handle online game start callback from lobby
   const handleStartOnlineGame = useCallback(
@@ -206,6 +213,7 @@ export function App() {
       setGameMode('online');
       setIsSpectator(spectator);
       setOnlineRoom(startedRoom);
+      hydrateOfflineTimers(startedRoom.offlineTimeouts);
       setMyRemotePlayer(me);
       if (startedRoom.spectatorCount !== undefined) {
         setSpectatorCount(startedRoom.spectatorCount);
@@ -229,7 +237,7 @@ export function App() {
       });
       startGame(configs);
     },
-    [startGame, setFullGameState]
+    [startGame, setFullGameState, hydrateOfflineTimers]
   );
 
   // Socket listeners for game start and state synchronization
@@ -239,6 +247,8 @@ export function App() {
     const handleConnected = () => setOnlineSocketId(socket.id ?? null);
     const handleDisconnected = () => setOnlineSocketId(null);
     const handleRoomUpdated = ({ room }: { room: MultiplayerRoom }) => {
+      if (multiplayerService.getCurrentRoom()?.code !== room.code) return;
+      hydrateOfflineTimers(room.offlineTimeouts);
       setOnlineRoom((previous) => (previous?.code === room.code ? room : previous));
       if (room.spectatorCount !== undefined) {
         setSpectatorCount(room.spectatorCount);
@@ -256,6 +266,7 @@ export function App() {
     }) => {
       setGameMode('online');
       setOnlineRoom(startedRoom);
+      hydrateOfflineTimers(startedRoom.offlineTimeouts);
       if (startedRoom.spectatorCount !== undefined) {
         setSpectatorCount(startedRoom.spectatorCount);
       }
@@ -307,12 +318,12 @@ export function App() {
       }));
 
       if (timeoutSeconds) {
-        setOfflineTimers((prev) => ({
-          ...prev,
-          [playerId]: timeoutSeconds,
+        const now = Date.now();
+        setOfflineNow(now);
+        setOfflineDeadlines((previous) => ({
+          ...previous,
+          [playerId]: Math.min(previous[playerId] ?? Infinity, now + timeoutSeconds * 1000),
         }));
-        setTurnTimeoutRemaining(timeoutSeconds);
-        setTurnTimeoutPlayerId(playerId);
       }
 
       setToastMessage({
@@ -337,13 +348,11 @@ export function App() {
         ),
       }));
 
-      setOfflineTimers((prev) => {
+      setOfflineDeadlines((prev) => {
         const next = { ...prev };
         delete next[playerId];
         return next;
       });
-      setTurnTimeoutRemaining(null);
-      setTurnTimeoutPlayerId(null);
 
       setToastMessage({
         id: Date.now(),
@@ -405,9 +414,7 @@ export function App() {
       setIsGameMenuOpen(false);
       setIsConfirmExitOpen(false);
       setRematchRequester(null);
-      setOfflineTimers({});
-      setTurnTimeoutRemaining(null);
-      setTurnTimeoutPlayerId(null);
+      hydrateOfflineTimers(resetRoom.offlineTimeouts);
       setOnlineRoom(resetRoom);
       isRemoteUpdateRef.current = true;
       setFullGameState(resetGameState);
@@ -421,18 +428,17 @@ export function App() {
     const handlePlayerEliminated = ({
       playerId,
       playerName,
+      reason,
     }: {
       playerId: string;
       playerName: string;
       reason?: string;
     }) => {
-      setOfflineTimers((prev) => {
+      setOfflineDeadlines((prev) => {
         const next = { ...prev };
         delete next[playerId];
         return next;
       });
-      setTurnTimeoutRemaining(null);
-      setTurnTimeoutPlayerId(null);
       isRemoteUpdateRef.current = true;
       setFullGameState((prev: GameState) => ({
         ...prev,
@@ -442,7 +448,7 @@ export function App() {
       }));
       setToastMessage({
         id: Date.now(),
-        text: `🚫 ${playerName} nem tért vissza időben, ezért végleg kiszállt a játékból!`,
+        text: reason === 'left' ? `${playerName} kiszállt a játékból.` : `${playerName} offline ideje lejárt, ezért kiszállt.`,
         type: 'warning',
       });
     };
@@ -456,14 +462,12 @@ export function App() {
       eliminatedPlayerId?: string;
     }) => {
       if (eliminatedPlayerId) {
-        setOfflineTimers((prev) => {
+        setOfflineDeadlines((prev) => {
           const next = { ...prev };
           delete next[eliminatedPlayerId];
           return next;
         });
       }
-      setTurnTimeoutRemaining(null);
-      setTurnTimeoutPlayerId(null);
       if (updatedState) {
         isRemoteUpdateRef.current = true;
         setFullGameState(updatedState);
@@ -485,16 +489,30 @@ export function App() {
       setMyRemotePlayer(null);
       setIsSpectator(false);
       setSpectatorCount(0);
-      setOfflineTimers({});
-      setTurnTimeoutRemaining(null);
-      setTurnTimeoutPlayerId(null);
-      engine.resetGame();
+      setOfflineDeadlines({});
+      setIsGameMenuOpen(false);
+      setIsConfirmExitOpen(false);
+      setIsRematchPromptOpen(false);
+      setRematchVotes({});
+      setRematchRequester(null);
+      setIsBankOpen(false);
+      setIsClinicOpen(false);
+      resetGame();
       setGameMode(null);
       setToastMessage({
         id: Date.now(),
         text: message || 'A szoba bezárt, mert minden játékos kiszállt.',
         type: 'warning',
       });
+    };
+
+    const handleRoomError = ({ error, errorCode }: { error?: string; errorCode?: string }) => {
+      if (errorCode === 'NOT_ENOUGH_PLAYERS') {
+        setIsRematchPromptOpen(false);
+        setRematchRequester(null);
+        setRematchVotes({});
+      }
+      if (error) setToastMessage({ id: Date.now(), text: error, type: 'warning' });
     };
 
     const handlePlayerLeft = ({ playerName }: { playerName: string }) => {
@@ -520,7 +538,8 @@ export function App() {
     socket.on('room:game_reset', handleGameReset);
     socket.on('turn:auto_passed', handleTurnAutoPassed);
     socket.on('room:player_left', handlePlayerLeft);
-    socket.on('room:closed', handleRoomClosed);
+    socket.on('room:error', handleRoomError);
+    const unsubscribeRoomClosed = multiplayerService.subscribeRoomClosed(handleRoomClosed);
     const unsubscribeSpectatorCount = multiplayerService.subscribeSpectatorCount((count) => {
       setSpectatorCount(count);
     });
@@ -540,9 +559,10 @@ export function App() {
       socket.off('room:game_reset', handleGameReset);
       socket.off('turn:auto_passed', handleTurnAutoPassed);
       socket.off('room:player_left', handlePlayerLeft);
-      socket.off('room:closed', handleRoomClosed);
+      socket.off('room:error', handleRoomError);
+      unsubscribeRoomClosed();
     };
-  }, [startGame, setFullGameState, engine]);
+  }, [startGame, setFullGameState, resetGame, hydrateOfflineTimers]);
 
   // Sync state to other players when a local player mutates gameState
   useEffect(() => {
@@ -555,29 +575,16 @@ export function App() {
     }
   }, [gameState, gameMode, onlineRoomCode, isSpectator]);
 
-  // Turn timeout countdown timer & per-player offline countdowns
+  const hasOfflineDeadlines = Object.keys(offlineDeadlines).length > 0;
   useEffect(() => {
-    const hasActiveTimers = Object.values(offlineTimers).some((sec) => sec > 0);
-    if (!hasActiveTimers && (turnTimeoutRemaining === null || turnTimeoutRemaining <= 0)) return;
-
-    const timer = setInterval(() => {
-      setTurnTimeoutRemaining((prev) => (prev && prev > 1 ? prev - 1 : null));
-      setOfflineTimers((prev) => {
-        let changed = false;
-        const next: Record<string, number> = {};
-        for (const [id, sec] of Object.entries(prev)) {
-          if (sec > 1) {
-            next[id] = sec - 1;
-            changed = true;
-          } else if (sec === 1) {
-            changed = true;
-          }
-        }
-        return changed ? next : prev;
-      });
+    if (!hasOfflineDeadlines) return;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setOfflineNow(now);
+      setOfflineDeadlines((previous) => pruneOfflineDeadlines(previous, now));
     }, 1000);
-    return () => clearInterval(timer);
-  }, [offlineTimers, turnTimeoutRemaining]);
+    return () => window.clearInterval(timer);
+  }, [hasOfflineDeadlines]);
 
   // Toast auto-dismiss after 4.5 seconds
   useEffect(() => {
@@ -644,8 +651,8 @@ export function App() {
   // Status message for the center board feed
   const statusMessage = useMemo(() => {
     const activePlayerId = activePlayer?.id;
-    const activeTimeout = (activePlayerId && offlineTimers[activePlayerId]) || turnTimeoutRemaining;
-    if (activeTimeout !== null && activeTimeout !== undefined && activeTimeout > 0) {
+    const activeTimeout = activePlayerId ? offlineTimers[activePlayerId] : undefined;
+    if (activePlayer?.connected === false && !activePlayer.eliminated && activeTimeout && activeTimeout > 0) {
       return `⚠️ Játékos kapcsolata megszakadt! Automatikus körátadás ${activeTimeout} mp múlva...`;
     }
     if (isSpectator) {
@@ -676,7 +683,6 @@ export function App() {
     }
     return undefined;
   }, [
-    turnTimeoutRemaining,
     offlineTimers,
     gameMode,
     isMyTurn,
@@ -983,7 +989,6 @@ export function App() {
             activePlayerIndex={gameState.activePlayerIndex}
             turnNumber={gameState.turnNumber}
             myPlayerId={gameMode === 'online' ? myRemotePlayer?.id : undefined}
-            offlineTimer={turnTimeoutPlayerId && turnTimeoutRemaining ? { playerId: turnTimeoutPlayerId, seconds: turnTimeoutRemaining } : null}
             offlineTimers={offlineTimers}
           />
 
@@ -1190,7 +1195,8 @@ export function App() {
           }
           setIsSpectator(false);
           setSpectatorCount(0);
-          engine.resetGame();
+          setOfflineDeadlines({});
+          resetGame();
           setGameMode(null);
         }}
       />
@@ -1242,7 +1248,8 @@ export function App() {
           }
           setIsSpectator(false);
           setSpectatorCount(0);
-          engine.resetGame();
+          setOfflineDeadlines({});
+          resetGame();
           setGameMode(null);
         }}
       />
@@ -1282,7 +1289,8 @@ export function App() {
           }
           setIsSpectator(false);
           setSpectatorCount(0);
-          engine.resetGame();
+          setOfflineDeadlines({});
+          resetGame();
           setGameMode(null);
         }}
         onRequestRematch={() => {

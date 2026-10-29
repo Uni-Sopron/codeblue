@@ -44,25 +44,26 @@ export function removeBotFromRoom(room, socketId, playerId) {
 
 export function canDriveActivePlayer(room, socketId) {
   if (!room?.gameStarted || !room.gameState || !Array.isArray(room.gameState.players)) return false;
-  const sender = room.players.find((player) => player.socketId === socketId && !player.isAI && player.connected !== false);
+  const sender = room.players.find((player) => player.socketId === socketId && !player.isAI && player.connected !== false && !player.eliminated);
   if (!sender) return false;
   const active = room.gameState.players[room.gameState.activePlayerIndex];
   const member = room.players.find((player) => player.id === active?.id);
-  if (!member) return false;
+  if (!member || member.eliminated) return false;
   return member.isAI ? room.hostSocketId === socketId : member.socketId === socketId;
 }
 
 export function hasValidRoster(room, state) {
   return Boolean(state && Array.isArray(state.players) && state.players.length === room.players.length
     && Number.isInteger(state.activePlayerIndex) && state.activePlayerIndex >= 0 && state.activePlayerIndex < state.players.length
+    && !room.players[state.activePlayerIndex].eliminated
     && state.players.every((player, index) => player && player.id === room.players[index].id
       && Boolean(player.isAI) === Boolean(room.players[index].isAI)));
 }
 
 export function transferHostToHuman(room) {
   const previousSocketId = room.hostSocketId;
-  const previous = room.players.find((player) => player.socketId === room.hostSocketId && !player.isAI && player.connected !== false);
-  const host = previous || room.players.find((player) => !player.isAI && player.connected !== false);
+  const previous = room.players.find((player) => player.socketId === room.hostSocketId && !player.isAI && player.connected !== false && !player.eliminated);
+  const host = previous || room.players.find((player) => !player.isAI && player.connected !== false && !player.eliminated);
   room.hostSocketId = host?.socketId || '';
   for (const player of room.players) player.isHost = player === host;
   if (room.gameState?.players) {

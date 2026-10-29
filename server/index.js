@@ -35,6 +35,7 @@ export function createInitialGameState(players) {
       id: p.id, name: p.name, color: p.color, avatar: p.avatar, avatarTitle: p.avatarTitle,
       cash: 1_500_000, debt: 0, position: 0, builtElements: [], skipTurns: 0, activeBuffs: [],
       bank: { savings: 0, clinicalBond: 0, biotechEquity: 0 }, connected: p.connected, isHost: p.isHost,
+      eliminated: Boolean(p.eliminated), bondLockTurns: 0,
       ...(p.isAI ? { isAI: true } : {}),
     })),
     activePlayerIndex: 0, turnNumber: 1, phase: 'roll', diceResult: null, isRolling: false,
@@ -61,6 +62,9 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
     })),
     gameStarted: room.gameStarted, gameState: room.gameState, createdAt: room.createdAt,
     rematchVotes: { ...room.rematchVotes },
+    offlineTimeouts: Object.fromEntries(room.players
+      .filter((p) => !p.isAI && !p.connected && !p.eliminated && p.offlineUntil)
+      .map((p) => [p.id, Math.max(0, Math.ceil((p.offlineUntil - now()) / 1000))])),
     spectatorCount: room.spectators ? room.spectators.size : 0,
   });
   const publicRooms = () => Array.from(rooms.values())
@@ -91,7 +95,7 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
       }
     }
   };
-  const deleteRoom = (code) => { const room = rooms.get(code); if (room) clearWatchdog(room); rooms.delete(code); secrets.delete(code); };
+  const deleteRoom = (code) => { const room = rooms.get(code); if (room) clearWatchdog(room); io.in(code).socketsLeave(code); rooms.delete(code); secrets.delete(code); };
   const limited = (socketId) => {
     const stamp = now();
     let entry = messageCounts.get(socketId);
@@ -102,41 +106,18 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
   };
   const transferHost = transferHostToHuman;
 
-  const handlePlayerElimination = (room, playerId, reason = 'timeout') => {
-    if (!rooms.has(room.code)) return;
-    clearWatchdog(room, playerId);
-    const player = room.players.find((p) => p.id === playerId);
-    if (!player || player.eliminated) return;
-    player.eliminated = true;
-    player.connected = false;
-
-    if (room.gameState) {
-      room.gameState = {
-        ...room.gameState,
-        players: room.gameState.players.map((p) =>
-          p.id === playerId ? { ...p, connected: false, eliminated: true } : p
-        ),
-      };
-    }
-
-    const remainingActive = room.gameState?.players.filter((p) => !p.eliminated) || [];
-    const hasEligibleHuman = room.players.some((p) => !p.isAI && (!p.eliminated || p.connected));
-
-    // Case 0: All players eliminated or no human players left in match
-    if (remainingActive.length === 0 || !hasEligibleHuman) {
-      io.to(room.code).emit('player:eliminated', { playerId, playerName: player.name, reason });
-      io.to(room.code).emit('room:closed', { reason: 'ALL_PLAYERS_LEFT', message: 'A szoba bezárt, mert minden játékos kiszállt.' });
-      deleteRoom(room.code);
-      publishDirectory();
-      return;
-    }
-
-    // Case 1: Exactly 1 player remaining (Last Doctor Standing)
-    if (remainingActive.length === 1) {
+  const settleTurn = (room) => {
+    if (!room.gameState || room.gameState.winner) return false;
+    const remainingActive = room.gameState.players.filter((p) => !p.eliminated);
+    if (remainingActive.length === 1 && remainingActive[0].connected) {
       const winner = remainingActive[0];
       room.gameState = {
         ...room.gameState,
         phase: 'game_over',
+        isRolling: false,
+        diceResult: null,
+        drawnCard: null,
+        extraRollAvailable: false,
         winner,
         logs: [
           {
@@ -150,28 +131,31 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
           ...(room.gameState.logs || []),
         ],
       };
-      io.to(room.code).emit('player:eliminated', { playerId, playerName: player.name, reason });
-      io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
-      publishRoom(room);
-      return;
+      return false;
     }
-
-    // Case > 1: Check if the eliminated player was the currently active player
-    const wasActive = room.gameState?.players[room.gameState.activePlayerIndex]?.id === playerId;
-    if (wasActive) {
-      let next = -1;
-      for (let offset = 1; offset < room.gameState.players.length; offset++) {
-        const index = (room.gameState.activePlayerIndex + offset) % room.gameState.players.length;
-        const candidate = room.gameState.players[index];
-        if (!candidate.eliminated && (candidate.isAI || room.players.some((p) => p.id === candidate.id && p.connected))) {
-          next = index;
-          break;
-        }
-      }
-      if (next !== -1) {
+    if (room.gameState.players[room.gameState.activePlayerIndex]?.eliminated) {
+      const eligible = remainingActive.filter((p) => p.connected);
+      const candidates = new Set((eligible.length ? eligible : remainingActive).map((p) => p.id));
+      if (candidates.size) {
         const previousIndex = room.gameState.activePlayerIndex;
+        let next = previousIndex;
+        let turnNumber = room.gameState.turnNumber;
+        const players = [...room.gameState.players];
+        const skipLogs = [];
+        while (true) {
+          next = (next + 1) % players.length;
+          if (next === 0) turnNumber++;
+          const candidate = players[next];
+          if (!candidates.has(candidate.id)) continue;
+          if (!(candidate.skipTurns > 0)) break;
+          players[next] = { ...candidate, skipTurns: candidate.skipTurns - 1 };
+          skipLogs.push({ id: `log-${randomBytes(8).toString('hex')}`, playerId: candidate.id, playerName: candidate.name,
+            message: `${candidate.name} kimarad a(z) ${turnNumber}. körből (fennmaradó büntetés: ${candidate.skipTurns - 1})!`,
+            timestamp: now(), type: 'system' });
+        }
         room.gameState = {
           ...room.gameState,
+          players,
           activePlayerIndex: next,
           phase: 'roll',
           diceResult: null,
@@ -179,28 +163,51 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
           drawnCard: null,
           roundPassBonusGranted: false,
           builtThisTurn: false,
-          turnNumber: room.gameState.turnNumber + (next <= previousIndex ? 1 : 0),
+          extraRollAvailable: false,
+          turnNumber,
+          logs: [...skipLogs, ...room.gameState.logs],
         };
-        io.to(room.code).emit('player:eliminated', { playerId, playerName: player.name, reason });
-        io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
-        io.to(room.code).emit('turn:auto_passed', {
-          newActivePlayerIndex: next,
-          gameState: room.gameState,
-          eliminatedPlayerId: playerId,
-        });
-        publishRoom(room);
-        scheduleWatchdog(room);
-        return;
+        return true;
       }
     }
+    return false;
+  };
+
+  const handlePlayerElimination = (room, playerId, reason = 'timeout') => {
+    if (!rooms.has(room.code)) return;
+    clearWatchdog(room, playerId);
+    const player = room.players.find((p) => p.id === playerId);
+    if (!player || player.eliminated) return;
+    player.eliminated = true;
+    player.connected = false;
+    delete player.offlineUntil;
+    delete room.rematchVotes[playerId];
+    room.gameState = {
+      ...room.gameState,
+      players: room.gameState.players.map((p) => p.id === playerId ? { ...p, connected: false, eliminated: true } : p),
+    };
 
     io.to(room.code).emit('player:eliminated', { playerId, playerName: player.name, reason });
+    if (!room.players.some((p) => !p.isAI && !p.eliminated)) {
+      io.to(room.code).emit('room:closed', { reason: 'ALL_PLAYERS_LEFT', message: 'A szoba bezárt, mert minden játékos kiszállt.' });
+      deleteRoom(room.code);
+      publishDirectory();
+      return;
+    }
+    const passed = settleTurn(room);
     io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
+    if (passed) io.to(room.code).emit('turn:auto_passed', {
+      newActivePlayerIndex: room.gameState.activePlayerIndex,
+      gameState: room.gameState,
+      eliminatedPlayerId: playerId,
+    });
     publishRoom(room);
+    scheduleWatchdog(room);
+    publishDirectory();
   };
 
   const scheduleWatchdog = (room) => {
-    if (!room?.gameStarted || room.gameState?.winner) {
+    if (!room?.gameStarted) {
       clearWatchdog(room);
       return;
     }
@@ -212,15 +219,17 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
       }
       if (!player.connected) {
         if (!timers.has(player.id)) {
+          player.offlineUntil ??= now() + disconnectTimeoutMs;
           const timer = setTimeout(() => {
             timers.delete(player.id);
-            handlePlayerElimination(room, player.id, 'timeout');
-          }, disconnectTimeoutMs);
+            if (!player.connected && !player.eliminated) handlePlayerElimination(room, player.id, 'timeout');
+          }, Math.max(0, player.offlineUntil - now()));
           timer.unref?.();
           timers.set(player.id, timer);
         }
       } else {
         clearWatchdog(room, player.id);
+        delete player.offlineUntil;
       }
     }
   };
@@ -251,7 +260,7 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
     const memberRoom = (code) => {
       if (!isValidRoomCode(code)) return null;
       const room = rooms.get(code.trim().toUpperCase());
-      return room && currentRoomCode === room.code && room.players.some((p) => p.socketId === socket.id && p.connected) ? room : null;
+      return room && currentRoomCode === room.code && room.players.some((p) => p.socketId === socket.id && p.connected && !p.eliminated) ? room : null;
     };
     const alreadyJoined = () => !!(currentRoomCode && memberRoom(currentRoomCode));
     const issueToken = (room, player) => {
@@ -398,22 +407,42 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
       publishDirectory();
     });
 
-    const acceptsState = (room, state) => canDriveActivePlayer(room, socket.id) && hasValidRoster(room, state);
+    const acceptsState = (room, state) => !room.gameState?.winner && room.gameState?.phase !== 'game_over'
+      && canDriveActivePlayer(room, socket.id) && hasValidRoster(room, state);
+    const canonicalState = (room, state) => {
+      const players = state.players.map((player, index) => ({ ...player,
+        connected: room.players[index].connected,
+        eliminated: Boolean(room.players[index].eliminated),
+        isHost: room.players[index].isHost,
+      }));
+      return { ...state, players, winner: state.winner ? players.find((p) => p.id === state.winner.id) || null : null };
+    };
+    const acceptUpdate = (room, state) => {
+      if (!room) return false;
+      if (!canDriveActivePlayer(room, socket.id)) return false;
+      if (!acceptsState(room, state)) {
+        socket.emit('game:sync_broadcast', { gameState: room.gameState });
+        return false;
+      }
+      const next = canonicalState(room, state);
+      const corrected = next.players.some((player, index) => player.connected !== state.players[index].connected
+        || Boolean(player.eliminated) !== Boolean(state.players[index].eliminated) || player.isHost !== state.players[index].isHost);
+      room.gameState = next;
+      room.lastActive = now();
+      if (corrected) socket.emit('game:sync_broadcast', { gameState: next });
+      return true;
+    };
     socket.on('game:action', (data = {}) => {
       if (!checkRate()) return;
       const room = memberRoom(data?.roomCode);
-      if (!room || !acceptsState(room, data.newGameState)) return;
-      room.gameState = data.newGameState;
-      room.lastActive = now();
+      if (!acceptUpdate(room, data.newGameState)) return;
       socket.to(room.code).emit('game:action_broadcast', { actionType: data.actionType, payload: data.payload, newGameState: room.gameState, senderSocketId: socket.id });
       scheduleWatchdog(room);
     });
     socket.on('game:sync', (data = {}) => {
       if (!checkRate()) return;
       const room = memberRoom(data?.roomCode);
-      if (!room || !acceptsState(room, data.gameState)) return;
-      room.gameState = data.gameState;
-      room.lastActive = now();
+      if (!acceptUpdate(room, data.gameState)) return;
       socket.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
       scheduleWatchdog(room);
     });
@@ -426,22 +455,28 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
       const player = room && room.players.find((p) => p.id === playerId && !p.isAI);
       const expected = room && secrets.get(room.code)?.tokens.get(playerId);
       if (!player || typeof reconnectToken !== 'string' || !safeEqual(hash(reconnectToken), expected)) return fail(callback, 'A visszacsatlakozási azonosító érvénytelen.', 'INVALID_RECONNECT');
-      if (player.eliminated) return fail(callback, 'Az offline limit lejárt, a játékból végleg kiszálltál.', 'PLAYER_ELIMINATED');
+      if (player.eliminated || (!player.connected && player.offlineUntil <= now())) {
+        if (!player.eliminated) handlePlayerElimination(room, player.id, 'timeout');
+        return fail(callback, 'Az offline limit lejárt, a játékból végleg kiszálltál.', 'PLAYER_ELIMINATED');
+      }
       if (player.connected) return fail(callback, 'A játékos már csatlakozva van.', 'PLAYER_CONNECTED');
       player.socketId = socket.id;
       player.connected = true;
+      delete player.offlineUntil;
       socket.join(room.code);
       currentRoomCode = room.code;
       room.lastActive = now();
-      const previousHost = room.hostSocketId;
       transferHost(room);
       if (room.gameState) room.gameState = { ...room.gameState, players: room.gameState.players.map((p) => p.id === player.id ? { ...p, connected: true } : p) };
+      if (!room.gameState?.winner && room.gameState?.isRolling && room.gameState.players[room.gameState.activePlayerIndex]?.id === player.id) {
+        room.gameState = { ...room.gameState, phase: 'roll', isRolling: false, diceResult: null };
+      }
+      settleTurn(room);
       scheduleWatchdog(room);
       const token = issueToken(room, player);
       if (typeof callback === 'function') callback({ success: true, room: roomView(room), player: roomView(room).players.find((p) => p.id === player.id), gameState: room.gameState, reconnectToken: token });
       if (room.gameState) {
-        if (previousHost !== room.hostSocketId) io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
-        else socket.emit('game:sync_broadcast', { gameState: room.gameState });
+        io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
       }
       io.to(room.code).emit('player:reconnected', { playerId: player.id, playerName: player.name });
       publishRoom(room);
@@ -459,17 +494,23 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
         io.to(room.code).emit('room:rematch_update', { votes: {}, requestedBy: player.name, requestedById: player.id, isHost: player.isHost, ready: false });
         return;
       }
+      const eligible = room.players.filter((p) => !p.eliminated);
+      if (eligible.length < 2) return fail(undefined, 'Az új meccshez legalább 2 orvos szükséges. Lépj vissza a főmenübe, és hozz létre új szobát.', 'NOT_ENOUGH_PLAYERS');
       room.rematchVotes[player.id] = true;
-      for (const bot of room.players.filter((p) => p.isAI)) room.rematchVotes[bot.id] = true;
+      for (const bot of eligible.filter((p) => p.isAI)) room.rematchVotes[bot.id] = true;
       room.lastActive = now();
       io.to(room.code).emit('room:rematch_update', { votes: { ...room.rematchVotes }, requestedBy: player.name, requestedById: player.id, isHost: player.isHost, ready: true });
-      const connected = room.players.filter((p) => p.connected && !p.isAI);
-      if (room.players.length >= 2 && connected.length >= 1 && connected.every((p) => room.rematchVotes[p.id] === true)) {
+      const connected = eligible.filter((p) => p.connected && !p.isAI);
+      if (connected.length >= 1 && connected.every((p) => room.rematchVotes[p.id] === true)) {
         room.rematchVotes = {};
         clearWatchdog(room);
+        for (const departed of room.players.filter((p) => p.eliminated)) secrets.get(room.code).tokens.delete(departed.id);
+        room.players = eligible;
+        transferHost(room);
         room.gameState = createInitialGameState(room.players);
-        io.to(room.code).emit('room:game_reset', { roomCode: room.code, room: roomView(room), gameState: room.gameState });
         scheduleWatchdog(room);
+        io.to(room.code).emit('room:game_reset', { roomCode: room.code, room: roomView(room), gameState: room.gameState });
+        publishDirectory();
       }
     });
 
@@ -503,6 +544,7 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
         else publishRoom(room);
       } else {
         player.connected = false;
+        if (!explicit) player.offlineUntil = now() + disconnectTimeoutMs;
         const previousHost = room.hostSocketId;
         if (explicit) secrets.get(room.code).tokens.delete(player.id);
         transferHost(room);
@@ -510,12 +552,12 @@ export function createGameServer({ now = Date.now, disconnectTimeoutMs = 30_000,
         const active = room.gameState.players[room.gameState.activePlayerIndex]?.id === player.id;
         io.to(room.code).emit('player:disconnected', { playerId: player.id, playerName: player.name, ...(explicit ? { reason: 'left' } : {}), isActivePlayer: active, timeoutSeconds: Math.ceil(disconnectTimeoutMs / 1000) });
         if (explicit) io.to(room.code).emit('room:player_left', { playerId: player.id, playerName: player.name });
-        publishRoom(room);
-        if (previousHost !== room.hostSocketId) io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
         if (explicit) {
           handlePlayerElimination(room, player.id, 'left');
         } else {
           scheduleWatchdog(room);
+          publishRoom(room);
+          if (previousHost !== room.hostSocketId) io.to(room.code).emit('game:sync_broadcast', { gameState: room.gameState });
         }
       }
       publishDirectory();

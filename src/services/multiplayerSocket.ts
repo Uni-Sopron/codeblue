@@ -35,6 +35,7 @@ export interface RemotePlayer {
   color: string;
   isHost: boolean;
   connected: boolean;
+  eliminated?: boolean;
   isAI?: boolean;
 }
 export interface MultiplayerRoom {
@@ -48,7 +49,7 @@ export interface MultiplayerRoom {
   gameState: GameState | null;
   createdAt: string;
   rematchVotes?: Record<string, boolean>;
-  disconnectTimeout?: { playerId: string; remainingSeconds: number } | null;
+  offlineTimeouts?: Record<string, number>;
   spectatorCount?: number;
 }
 export interface RoomResponse {
@@ -71,6 +72,7 @@ class MultiplayerSocketService {
   private roomSubscriptions = new Set<(rooms: PublicRoomSummary[]) => void>();
   private latestRooms: PublicRoomSummary[] = [];
   private spectatorCountListeners = new Set<(count: number) => void>();
+  private roomClosedListeners = new Set<(event: { reason?: string; message?: string }) => void>();
 
   private tokenKey(roomCode: string, playerId: string): string {
     return `codeblue:reconnect:${roomCode}:${playerId}`;
@@ -96,6 +98,12 @@ class MultiplayerSocketService {
     this.reconnectTokens.delete(key);
     try { sessionStorage.removeItem(key); } catch { /* Storage can be disabled. */ }
   }
+  private endRoomSession(event: { reason?: string; message?: string }): void {
+    this.forgetToken();
+    this.currentRoom = null;
+    this.myPlayer = null;
+    this.roomClosedListeners.forEach((listener) => listener(event));
+  }
   private request(event: string, payload: unknown): Promise<RoomResponse> {
     const socket = this.connect();
     return new Promise((resolve) => {
@@ -118,6 +126,7 @@ class MultiplayerSocketService {
         this.latestRooms = rooms;
         this.roomSubscriptions.forEach((listener) => listener(rooms));
       };
+      this.socket.on('room:closed', (event: { reason?: string; message?: string }) => this.endRoomSession(event));
       this.socket.on('rooms:list', onRooms);
       this.socket.on('rooms:update', onRooms);
       this.socket.on('room:spectator_count', ({ spectatorCount }: { spectatorCount: number }) => {
@@ -183,7 +192,17 @@ class MultiplayerSocketService {
     this.socket?.emit('game:sync', { roomCode, gameState });
   }
   public reconnectRoom(roomCode: string, playerId: string): Promise<RoomResponse> {
-    return this.request('room:reconnect', { roomCode, playerId, reconnectToken: this.readToken(roomCode, playerId) });
+    return this.request('room:reconnect', { roomCode, playerId, reconnectToken: this.readToken(roomCode, playerId) }).then((response) => {
+      if (!response.success && this.currentRoom?.code === roomCode && this.myPlayer?.id === playerId
+        && ['PLAYER_ELIMINATED', 'ROOM_NOT_FOUND', 'INVALID_RECONNECT'].includes(response.errorCode || '')) {
+        this.endRoomSession({ reason: response.errorCode, message: response.error || 'A meccshez már nem tudsz visszacsatlakozni.' });
+      }
+      return response;
+    });
+  }
+  public subscribeRoomClosed(listener: (event: { reason?: string; message?: string }) => void): () => void {
+    this.roomClosedListeners.add(listener);
+    return () => { this.roomClosedListeners.delete(listener); };
   }
   public voteRematch(roomCode: string, ready: boolean): void { this.socket?.emit('room:rematch_vote', { roomCode, ready }); }
   public leaveRoom(roomCode: string): void {

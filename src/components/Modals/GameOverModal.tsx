@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Player } from '../../types/game.ts';
+import { GAME_CONSTANTS } from '../../types/game.ts';
 import { CLINIC_ELEMENTS } from '../../data/clinicElements.ts';
 import { Trophy, CheckCircle2, RotateCcw, LogOut } from 'lucide-react';
 import './GameOverModal.css';
@@ -35,6 +36,11 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
   const isOnline = gameMode === 'online';
   const isMyVoteReady = myPlayerId ? rematchVotes[myPlayerId] === true : false;
+  const hasAllElements = CLINIC_ELEMENTS.every((element) => winner.builtElements.includes(element.id));
+  const isNormalVictory = hasAllElements && winner.cash >= GAME_CONSTANTS.VICTORY_MIN_CASH && winner.debt === 0;
+  const remainingPlayers = players.filter((player) => !player.eliminated);
+  const hasOpponents = remainingPlayers.length >= 2;
+  const canVote = hasOpponents && remainingPlayers.some((player) => player.id === myPlayerId && !player.isAI && player.connected !== false);
 
   return (
     <div className="game-over-backdrop">
@@ -46,9 +52,9 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
         </div>
 
         <div className="victory-header">
-          <h2 className="victory-title">A Magánklinika Megépült!</h2>
+          <h2 className="victory-title">{isNormalVictory ? 'A Magánklinika Megépült!' : 'Technikai győzelem'}</h2>
           <p className="victory-subtitle">
-            Megszületett a város legkorszerűbb magánklinikájának nyertes igazgatója!
+            {isNormalVictory ? 'Teljesült mind a három győzelmi feltétel.' : 'A többi játékos kiszállt a meccsből.'}
           </p>
         </div>
 
@@ -66,7 +72,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
         </div>
 
         {/* 8 felépült részleg felsorolása */}
-        <div className="victory-clinic-showcase">
+        {hasAllElements && <div className="victory-clinic-showcase">
           <div className="showcase-header">
             <CheckCircle2 size={16} className="showcase-icon" />
             <span>Mind a 8 klinikai részleg sikeresen átadva!</span>
@@ -83,7 +89,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               </div>
             ))}
           </div>
-        </div>
+        </div>}
 
         {/* Statisztikák */}
         <div className="victory-stats-row">
@@ -96,7 +102,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
           <div className="stat-box">
             <span className="stat-box-label">Tartozás</span>
-            <span className="stat-box-val debt-val">0 KK</span>
+            <span className="stat-box-val debt-val">{winner.debt.toLocaleString('hu-HU')} KK</span>
           </div>
 
           <div className="stat-box">
@@ -108,40 +114,42 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
         {/* Online Visszavágó Rendszer */}
         {isOnline ? (
           <div className="rematch-panel">
-            <h3 className="rematch-title">Visszavágó és Új Meccs</h3>
-            <p className="rematch-subtitle">
-              Amint minden játékos kész, a szoba azonnal újraindul az 1. körtől!
-            </p>
+            {hasOpponents ? <>
+              <h3 className="rematch-title">Visszavágó és Új Meccs</h3>
+              <p className="rematch-subtitle">
+                Amint minden játékos kész, a szoba azonnal újraindul az 1. körtől!
+              </p>
 
-            <div className="rematch-players-list">
-              {players.map((p) => {
-                const isReady = rematchVotes[p.id] === true;
-                const isMe = p.id === myPlayerId;
-                return (
-                  <div key={p.id} className={`rematch-player-item ${isReady ? 'ready' : ''}`}>
-                    <span className="rematch-player-dot" style={{ backgroundColor: p.color }} />
-                    <span className="rematch-player-name">
-                      {p.name} {isMe ? '(Te)' : ''}
-                    </span>
-                    <span
-                      className={`rematch-player-badge ${isReady ? 'badge-ready' : 'badge-waiting'}`}
-                    >
-                      {isReady ? 'Kész ✓' : 'Várakozás...'}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+              <div className="rematch-players-list">
+                {remainingPlayers.map((p) => {
+                  const isReady = rematchVotes[p.id] === true;
+                  const isMe = p.id === myPlayerId;
+                  return (
+                    <div key={p.id} className={`rematch-player-item ${isReady ? 'ready' : ''}`}>
+                      <span className="rematch-player-dot" style={{ backgroundColor: p.color }} />
+                      <span className="rematch-player-name">
+                        {p.name} {isMe ? '(Te)' : ''}
+                      </span>
+                      <span
+                        className={`rematch-player-badge ${isReady ? 'badge-ready' : 'badge-waiting'}`}
+                      >
+                        {isReady ? 'Kész ✓' : 'Várakozás...'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </> : <p className="rematch-subtitle">Új ellenfélhez hozz létre új szobát.</p>}
 
             <div className="rematch-actions-row">
-              <button
+              {canVote && <button
                 type="button"
                 className={`btn-vote-rematch ${isMyVoteReady ? 'active' : ''}`}
                 onClick={() => onVoteRematch?.(!isMyVoteReady)}
               >
                 <RotateCcw size={18} />
                 <span>{isMyVoteReady ? 'Készen állsz! (Visszavonás)' : 'Visszavágót kérek'}</span>
-              </button>
+              </button>}
 
               {onLeaveRoom && (
                 <button type="button" className="btn-leave-rematch" onClick={onLeaveRoom}>

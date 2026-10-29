@@ -190,7 +190,9 @@ test('Host disconnect transfers bot authority to a human, releases a pending rol
   assert.equal(state.phase, 'roll');
   assert.equal(state.builtThisTurn, true);
   const returnedHost = await connect();
+  const reconnectSync = event<{ gameState: GameState }>(guest, 'game:sync_broadcast', (value) => value.gameState.players[0].connected === true);
   const reconnected = await request(returnedHost, 'room:reconnect', { roomCode: room.roomCode, playerId: 'p1', reconnectToken: room.reconnectToken });
+  await reconnectSync;
   assert(reconnected.success);
   assert.equal(reconnected.player.isHost, false);
   await rejected(guest, () => returnedHost.emit('game:sync', { roomCode: room.roomCode, gameState: { ...state, phase: 'building' } }));
