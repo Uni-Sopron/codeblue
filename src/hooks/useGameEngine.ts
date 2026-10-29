@@ -21,6 +21,7 @@ import { applyDevAction } from '../utils/devTools.ts';
 import type { DevAction } from '../utils/devTools.ts';
 import { accrueBankForMovement, applyBankTransaction, getBankBalances } from '../utils/bank.ts';
 import type { BankAccrual, BankTransaction } from '../utils/bank.ts';
+import { getNextTurn } from '../utils/turnOrder.ts';
 
 export interface PlayerSetupConfig {
   id: PlayerId;
@@ -454,6 +455,7 @@ export function useGameEngine() {
    * iii. Tartozásmentes (0 KK hitel)
    */
   const checkVictoryConditions = useCallback((player: Player): boolean => {
+    if (player.eliminated) return false;
     const hasAllElements = CLINIC_ELEMENTS.every((el) => player.builtElements.includes(el.id));
     const hasMinCash = player.cash >= GAME_CONSTANTS.VICTORY_MIN_CASH;
     const isDebtFree = player.debt === 0;
@@ -1054,6 +1056,7 @@ rollTimer.current = setTimeout(() => {
    */
   const endTurn = useCallback(() => {
     setGameState((prev) => {
+      if (prev.winner || prev.phase === 'game_over') return prev;
       const currentP = prev.players[prev.activePlayerIndex];
       if (!currentP) return prev;
 
@@ -1099,13 +1102,6 @@ rollTimer.current = setTimeout(() => {
         };
       }
 
-      // Következő játékos kiválasztása
-      let nextIndex = (prev.activePlayerIndex + 1) % prev.players.length;
-      let nextTurnNumber = prev.turnNumber;
-      if (nextIndex === 0) {
-        nextTurnNumber += 1;
-      }
-
       const updatedPlayers = [...prev.players];
 
       // A most befejezett kör orvosának kötvény-zárolási idejének csökkentése (ha van)
@@ -1117,53 +1113,30 @@ rollTimer.current = setTimeout(() => {
         };
       }
 
-      let nextP = { ...updatedPlayers[nextIndex] };
-      const skipLogs: GameLog[] = [];
-
-      // Körből kimaradás és kiesett státusz ellenőrzése a következő játékosnál
-      let searchIterations = 0;
-      while ((nextP.skipTurns > 0 || nextP.eliminated) && searchIterations < updatedPlayers.length) {
-        searchIterations++;
-        if (nextP.eliminated) {
-          nextIndex = (nextIndex + 1) % prev.players.length;
-          if (nextIndex === 0) {
-            nextTurnNumber += 1;
-          }
-          nextP = { ...updatedPlayers[nextIndex] };
-          continue;
-        }
-
-        skipLogs.push({
-          id: createLogId(),
-          playerId: nextP.id,
-          playerName: nextP.name,
-          message: `${nextP.name} kimarad a(z) ${nextTurnNumber}. körből (fennmaradó büntetés: ${nextP.skipTurns - 1})!`,
-          timestamp: Date.now(),
-          type: 'system',
-        });
-        nextP.skipTurns -= 1;
-        updatedPlayers[nextIndex] = nextP;
-
-        // Továbbugrás a rákövetkező játékosra
-        nextIndex = (nextIndex + 1) % prev.players.length;
-        if (nextIndex === 0) {
-          nextTurnNumber += 1;
-        }
-        nextP = { ...updatedPlayers[nextIndex] };
-      }
+      const nextTurn = getNextTurn(updatedPlayers, prev.activePlayerIndex, prev.turnNumber);
+      if (!nextTurn) return prev;
+      const nextP = { ...nextTurn.players[nextTurn.activePlayerIndex] };
+      const skipLogs: GameLog[] = nextTurn.skippedTurns.map((skipped) => ({
+        id: createLogId(),
+        playerId: skipped.playerId,
+        playerName: skipped.playerName,
+        message: `${skipped.playerName} kimarad a(z) ${skipped.turnNumber}. körből (fennmaradó büntetés: ${skipped.remainingTurns})!`,
+        timestamp: Date.now(),
+        type: 'system',
+      }));
 
       // Aktív buffok idejének frissítése
       const refreshedBuffs = nextP.activeBuffs
         .map((b) => ({ ...b, remainingTurns: b.remainingTurns - 1 }))
         .filter((b) => b.remainingTurns > 0);
       nextP.activeBuffs = refreshedBuffs;
-      updatedPlayers[nextIndex] = nextP;
+      nextTurn.players[nextTurn.activePlayerIndex] = nextP;
 
       return {
         ...prev,
-        players: updatedPlayers,
-        activePlayerIndex: nextIndex,
-        turnNumber: nextTurnNumber,
+        players: nextTurn.players,
+        activePlayerIndex: nextTurn.activePlayerIndex,
+        turnNumber: nextTurn.turnNumber,
         phase: 'roll',
         diceResult: null,
         drawnCard: null,

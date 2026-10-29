@@ -13,7 +13,6 @@ interface PlayerHUDProps {
   selectedPlayerIndex?: number;
   onSelectPlayer?: (index: number) => void;
   myPlayerId?: string;
-  offlineTimer?: { playerId: string; seconds: number } | null;
   offlineTimers?: Record<string, number>;
 }
 
@@ -25,7 +24,6 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
   selectedPlayerIndex,
   onSelectPlayer,
   myPlayerId,
-  offlineTimer,
   offlineTimers,
 }) => {
   if (players.length === 0) {
@@ -63,7 +61,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
           const totalBuildings = GAME_CONSTANTS.TOTAL_CLINIC_ELEMENTS;
           const isEliminated = player.eliminated === true;
           const isOffline = player.connected === false && !isEliminated;
-          const remainingSeconds = offlineTimers?.[player.id] ?? (offlineTimer?.playerId === player.id ? offlineTimer.seconds : null);
+          const remainingSeconds = offlineTimers?.[player.id];
           const isTimedOutPlayer = isOffline && typeof remainingSeconds === 'number' && remainingSeconds > 0;
 
           return (
